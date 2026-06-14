@@ -4,12 +4,16 @@ import type {
   AccountStruct,
   AnalyzeResult,
   FieldTypeChange,
+  MachineReadableUpgradeReport,
+  MigrationComplexity,
+  ReallocGuidance,
   RiskLevel,
   UpgradeReadinessReport
 } from "./index.js";
 import { analyzeAnchorProject } from "./project.js";
+import { defaultRentEstimator } from "./rent.js";
 
-const RISK_ORDER: RiskLevel[] = ["None", "Low", "Medium", "High"];
+const RISK_ORDER: RiskLevel[] = ["None", "Low", "Medium", "High", "Critical"];
 
 export async function compareAnchorProjects(
   oldProjectPath: string,
@@ -58,6 +62,44 @@ export function compareAccountSets(
   return diffs;
 }
 
+export function toMachineReadableReport(report: UpgradeReadinessReport): MachineReadableUpgradeReport {
+  return {
+    accountsChanged: report.accountsChanged,
+    overallRisk: lowerRisk(report.overallRisk),
+    accounts: report.accountDiffs.map((diff) => ({
+      account: diff.name,
+      accountId: diff.accountId,
+      namespace: diff.namespace,
+      status: diff.status,
+      oldSize: diff.oldSize,
+      newSize: diff.newSize,
+      delta: diff.sizeDelta,
+      additionalBytesRequired: diff.additionalBytesRequired,
+      migrationRequired: diff.migrationRequired,
+      risk: lowerRisk(diff.riskLevel),
+      complexity: lowerComplexity(diff.complexity),
+      reallocRequired: diff.realloc.required,
+      rentImpact: lowerRentImpact(diff.rentImpact.status),
+      estimatedAdditionalBytes: diff.rentImpact.estimatedAdditionalBytes,
+      addedFields: diff.addedFields.map((field) => ({ name: field.name, type: field.type })),
+      removedFields: diff.removedFields.map((field) => ({ name: field.name, type: field.type })),
+      typeChanges: diff.typeChangedFields.map((field) => ({
+        name: field.name,
+        oldType: field.oldType,
+        newType: field.newType
+      })),
+      abiFingerprintChanged: diff.abiFingerprintChanged,
+      oldAbiFingerprint: diff.oldAbiFingerprint,
+      newAbiFingerprint: diff.newAbiFingerprint,
+      fieldReordered: diff.fieldReordered,
+      reasons: diff.reasons,
+      dynamicSize: diff.hasDynamicSize,
+      warnings: diff.layoutWarnings,
+      upgradePlan: diff.upgradePlan
+    }))
+  };
+}
+
 function buildUpgradeReadinessReport(
   oldProject: AnalyzeResult,
   newProject: AnalyzeResult
@@ -75,42 +117,83 @@ function buildUpgradeReadinessReport(
 
 function buildAddedAccountDiff(account: AccountStruct): AccountDiff {
   return {
+    accountId: accountKey(account),
     name: account.name,
+    namespace: accountNamespace(account),
     status: "added",
     oldSize: null,
     newSize: account.byteSize,
+    sizeDelta: null,
+    additionalBytesRequired: 0,
     addedFields: account.fields,
     removedFields: [],
     typeChangedFields: [],
     sizeChanged: true,
+    abiFingerprintChanged: true,
+    oldAbiFingerprint: null,
+    newAbiFingerprint: accountFingerprint(account),
+    fieldReordered: false,
+    reasons: ["Account introduced"],
+    layoutWarnings: accountLayoutWarnings(account),
+    hasDynamicSize: accountHasDynamicSize(account),
     migrationRequired: false,
     riskLevel: "Low",
+    complexity: "Low",
+    realloc: reallocGuidance(null),
+    rentImpact: defaultRentEstimator.estimate({ oldSize: null, newSize: account.byteSize }),
     recommendations: uniqueRecommendations([
       "Update account initialization flows",
       "Regenerate IDL",
       "Rebuild clients"
-    ])
+    ]),
+    upgradePlan: [
+      `Add initialization path for ${account.name} accounts`,
+      "Regenerate IDL",
+      "Rebuild TypeScript clients",
+      "Run migration tests"
+    ]
   };
 }
 
 function buildRemovedAccountDiff(account: AccountStruct): AccountDiff {
   return {
+    accountId: accountKey(account),
     name: account.name,
+    namespace: accountNamespace(account),
     status: "removed",
     oldSize: account.byteSize,
     newSize: null,
+    sizeDelta: null,
+    additionalBytesRequired: 0,
     addedFields: [],
     removedFields: account.fields,
     typeChangedFields: [],
     sizeChanged: true,
+    abiFingerprintChanged: true,
+    oldAbiFingerprint: accountFingerprint(account),
+    newAbiFingerprint: null,
+    fieldReordered: false,
+    reasons: ["Account removed"],
+    layoutWarnings: accountLayoutWarnings(account),
+    hasDynamicSize: accountHasDynamicSize(account),
     migrationRequired: true,
     riskLevel: "High",
+    complexity: "High",
+    realloc: reallocGuidance(null),
+    rentImpact: defaultRentEstimator.estimate({ oldSize: account.byteSize, newSize: null }),
     recommendations: uniqueRecommendations([
       "Plan explicit state deprecation or migration",
       "Remove dependent instructions and clients",
       "Regenerate IDL",
       "Rebuild clients"
-    ])
+    ]),
+    upgradePlan: [
+      `Plan deprecation or migration for ${account.name} accounts`,
+      "Remove dependent instructions and clients",
+      "Regenerate IDL",
+      "Rebuild TypeScript clients",
+      "Run migration tests"
+    ]
   };
 }
 
@@ -139,42 +222,88 @@ function buildChangedAccountDiff(
   }
 
   const sizeChanged = oldAccount.byteSize !== newAccount.byteSize;
+  const sizeDelta = newAccount.byteSize - oldAccount.byteSize;
+  const abiFingerprintChanged = accountFingerprint(oldAccount) !== accountFingerprint(newAccount);
+  const fieldReordered = isFieldReorder(oldAccount.fields, newAccount.fields);
 
   if (
     addedFields.length === 0 &&
     removedFields.length === 0 &&
     typeChangedFields.length === 0 &&
-    !sizeChanged
+    !sizeChanged &&
+    !abiFingerprintChanged
   ) {
     return null;
   }
 
-  const migrationRequired = sizeChanged || addedFields.length > 0 || removedFields.length > 0 || typeChangedFields.length > 0;
+  const migrationRequired = sizeChanged || addedFields.length > 0 || removedFields.length > 0 || typeChangedFields.length > 0 || fieldReordered;
   const riskLevel = riskForChangedAccount({
     oldSize: oldAccount.byteSize,
     newSize: newAccount.byteSize,
     addedFields,
     removedFields,
-    typeChangedFields
+    typeChangedFields,
+    fieldReordered
   });
-
-  return {
-    name: oldAccount.name,
-    status: "changed",
+  const complexity = complexityForChangedAccount({
     oldSize: oldAccount.byteSize,
     newSize: newAccount.byteSize,
     addedFields,
     removedFields,
     typeChangedFields,
+    fieldReordered
+  });
+
+  return {
+    accountId: accountKey(oldAccount),
+    name: oldAccount.name,
+    namespace: accountNamespace(oldAccount),
+    status: "changed",
+    oldSize: oldAccount.byteSize,
+    newSize: newAccount.byteSize,
+    sizeDelta,
+    additionalBytesRequired: Math.max(sizeDelta, 0),
+    addedFields,
+    removedFields,
+    typeChangedFields,
     sizeChanged,
+    abiFingerprintChanged,
+    oldAbiFingerprint: accountFingerprint(oldAccount),
+    newAbiFingerprint: accountFingerprint(newAccount),
+    fieldReordered,
+    reasons: reasonsForChangedAccount({
+      addedFields,
+      removedFields,
+      typeChangedFields,
+      sizeChanged,
+      fieldReordered,
+      abiFingerprintChanged
+    }),
+    layoutWarnings: [...accountLayoutWarnings(oldAccount), ...accountLayoutWarnings(newAccount)],
+    hasDynamicSize: accountHasDynamicSize(oldAccount) || accountHasDynamicSize(newAccount),
     migrationRequired,
     riskLevel,
+    complexity,
+    realloc: reallocGuidance(newAccount.byteSize, sizeDelta),
+    rentImpact: defaultRentEstimator.estimate({
+      oldSize: oldAccount.byteSize,
+      newSize: newAccount.byteSize
+    }),
     recommendations: recommendationsForChangedAccount({
       oldSize: oldAccount.byteSize,
       newSize: newAccount.byteSize,
       addedFields,
       removedFields,
-      typeChangedFields
+      typeChangedFields,
+      fieldReordered
+    }),
+    upgradePlan: upgradePlanForChangedAccount(oldAccount.name, {
+      oldSize: oldAccount.byteSize,
+      newSize: newAccount.byteSize,
+      addedFields,
+      removedFields,
+      typeChangedFields,
+      fieldReordered
     })
   };
 }
@@ -185,7 +314,43 @@ function riskForChangedAccount(input: {
   addedFields: AccountField[];
   removedFields: AccountField[];
   typeChangedFields: FieldTypeChange[];
+  fieldReordered?: boolean;
 }): RiskLevel {
+  if (input.fieldReordered) {
+    return "Critical";
+  }
+
+  if (destructiveChangeCount(input) > 1) {
+    return "Critical";
+  }
+
+  if (input.removedFields.length > 0 || input.typeChangedFields.length > 0 || input.newSize < input.oldSize) {
+    return "High";
+  }
+
+  if (input.addedFields.length > 0 || input.newSize > input.oldSize) {
+    return "Medium";
+  }
+
+  return "Low";
+}
+
+function complexityForChangedAccount(input: {
+  oldSize: number;
+  newSize: number;
+  addedFields: AccountField[];
+  removedFields: AccountField[];
+  typeChangedFields: FieldTypeChange[];
+  fieldReordered?: boolean;
+}): MigrationComplexity {
+  if (input.fieldReordered) {
+    return "Critical";
+  }
+
+  if (destructiveChangeCount(input) > 1) {
+    return "Critical";
+  }
+
   if (input.removedFields.length > 0 || input.typeChangedFields.length > 0 || input.newSize < input.oldSize) {
     return "High";
   }
@@ -203,11 +368,16 @@ function recommendationsForChangedAccount(input: {
   addedFields: AccountField[];
   removedFields: AccountField[];
   typeChangedFields: FieldTypeChange[];
+  fieldReordered?: boolean;
 }): string[] {
   const recommendations: string[] = [];
 
+  if (input.fieldReordered) {
+    recommendations.push("Treat field reorder as an incompatible layout change", "Plan explicit state migration");
+  }
+
   if (input.addedFields.length > 0 || input.newSize > input.oldSize) {
-    recommendations.push("Reallocate existing accounts", "Top up rent");
+    recommendations.push("Reallocate existing accounts", "Top up rent exemption");
   }
 
   if (input.removedFields.length > 0 || input.newSize < input.oldSize) {
@@ -222,8 +392,67 @@ function recommendationsForChangedAccount(input: {
   return uniqueRecommendations(recommendations);
 }
 
+function upgradePlanForChangedAccount(accountName: string, input: {
+  oldSize: number;
+  newSize: number;
+  addedFields: AccountField[];
+  removedFields: AccountField[];
+  typeChangedFields: FieldTypeChange[];
+  fieldReordered?: boolean;
+}): string[] {
+  const steps: string[] = [];
+
+  if (input.fieldReordered) {
+    steps.push(`Plan incompatible layout migration for ${accountName}`, `Verify ${accountName} account decoding against existing data`);
+  }
+
+  if (input.newSize > input.oldSize) {
+    steps.push(`Reallocate ${accountName} account`, "Top up rent exemption");
+  }
+
+  if (input.removedFields.length > 0 || input.newSize < input.oldSize) {
+    steps.push(`Plan state migration for ${accountName}`);
+  }
+
+  if (input.typeChangedFields.length > 0) {
+    steps.push(`Transform existing ${accountName} account data`);
+  }
+
+  steps.push("Regenerate IDL", "Rebuild TypeScript clients", "Run migration tests");
+  return uniqueRecommendations(steps);
+}
+
+function reallocGuidance(newSize: number | null, sizeDelta = 0): ReallocGuidance {
+  if (newSize === null || sizeDelta <= 0) {
+    return {
+      required: false,
+      newSize,
+      payerRequired: false,
+      zeroInit: false,
+      suggestedAction: null
+    };
+  }
+
+  return {
+    required: true,
+    newSize,
+    payerRequired: true,
+    zeroInit: false,
+    suggestedAction: `account.realloc(${newSize}, false)`
+  };
+}
+
+function destructiveChangeCount(input: {
+  oldSize: number;
+  newSize: number;
+  removedFields: AccountField[];
+  typeChangedFields: FieldTypeChange[];
+}): number {
+  return input.removedFields.length + input.typeChangedFields.length + (input.newSize < input.oldSize ? 1 : 0);
+}
+
 function mapAccountsByName(accounts: AccountStruct[]): Map<string, AccountStruct> {
-  return new Map(accounts.map((account) => [account.name, account]));
+  return new Map(accounts.map((account) => [accountKey(account), account]));
 }
 
 function mapFieldsByName(fields: AccountField[]): Map<string, AccountField> {
@@ -238,4 +467,94 @@ function highestRisk(risks: RiskLevel[]): RiskLevel {
 
 function uniqueRecommendations(recommendations: string[]): string[] {
   return Array.from(new Set(recommendations));
+}
+
+function accountKey(account: AccountStruct): string {
+  return account.accountId ?? `${account.namespace ?? account.filePath}::${account.name}`;
+}
+
+function accountNamespace(account: AccountStruct): string {
+  return account.namespace ?? account.filePath;
+}
+
+function accountFingerprint(account: AccountStruct): string {
+  return account.abiFingerprint ?? JSON.stringify({
+    account: account.name,
+    fields: account.fields.map((field) => ({ name: field.name, type: field.type }))
+  });
+}
+
+function accountLayoutWarnings(account: AccountStruct) {
+  return account.layoutWarnings ?? [];
+}
+
+function accountHasDynamicSize(account: AccountStruct): boolean {
+  return account.hasDynamicSize ?? account.fields.some((field) => field.dynamic);
+}
+
+function isFieldReorder(oldFields: AccountField[], newFields: AccountField[]): boolean {
+  if (oldFields.length !== newFields.length) {
+    return false;
+  }
+
+  const oldSignatures = oldFields.map((field) => `${field.name}:${field.type}`).sort();
+  const newSignatures = newFields.map((field) => `${field.name}:${field.type}`).sort();
+
+  if (!oldSignatures.every((signature, index) => signature === newSignatures[index])) {
+    return false;
+  }
+
+  return oldFields.some((field, index) => {
+    const newField = newFields[index];
+    return field.name !== newField.name || field.type !== newField.type;
+  });
+}
+
+function reasonsForChangedAccount(input: {
+  addedFields: AccountField[];
+  removedFields: AccountField[];
+  typeChangedFields: FieldTypeChange[];
+  sizeChanged: boolean;
+  fieldReordered: boolean;
+  abiFingerprintChanged: boolean;
+}): string[] {
+  const reasons: string[] = [];
+
+  if (input.fieldReordered) {
+    reasons.push("Field Reorder Detected");
+  }
+
+  if (input.addedFields.length > 0) {
+    reasons.push("Field insertion detected");
+  }
+
+  if (input.removedFields.length > 0) {
+    reasons.push("Field removal detected");
+  }
+
+  if (input.typeChangedFields.length > 0) {
+    reasons.push("Field type change detected");
+  }
+
+  if (input.sizeChanged) {
+    reasons.push("Account size changed");
+  }
+
+  if (input.abiFingerprintChanged) {
+    reasons.push("ABI fingerprint changed");
+  }
+
+  return uniqueRecommendations(reasons);
+}
+
+function lowerRisk(risk: RiskLevel): Lowercase<RiskLevel> {
+  return risk.toLowerCase() as Lowercase<RiskLevel>;
+}
+
+function lowerComplexity(complexity: MigrationComplexity): Lowercase<MigrationComplexity> {
+  return complexity.toLowerCase() as Lowercase<MigrationComplexity>;
+}
+
+function lowerRentImpact(status: "Unchanged" | "Increased" | "Decreased" | "Unknown"): Lowercase<typeof status> {
+  return status.toLowerCase() as Lowercase<typeof status>;
 }

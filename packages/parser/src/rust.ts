@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { AccountField, AccountStruct } from "./index.js";
 import { sizeOfRustType } from "./sizes.js";
 
@@ -8,6 +9,19 @@ type StructBlock = {
   body: string;
   endIndex: number;
 };
+
+export class AnalysisError extends Error {
+  constructor(
+    message: string,
+    readonly account: string,
+    readonly field: string,
+    readonly type: string,
+    readonly filePath: string
+  ) {
+    super(message);
+    this.name = "AnalysisError";
+  }
+}
 
 export function parseAccountStructs(source: string, filePath: string): AccountStruct[] {
   const cleanSource = stripRustComments(source);
@@ -28,13 +42,28 @@ export function parseAccountStructs(source: string, filePath: string): AccountSt
       continue;
     }
 
-    const fields = parseNamedFields(structBlock.body);
-    const fieldBytes = fields.reduce((sum, field) => sum + (field.byteSize ?? 0), 0);
+    const fields = parseNamedFields(structBlock.body, structBlock.name, filePath);
+    const fieldBytes = fields.reduce((sum, field) => sum + field.byteSize, 0);
+    const layoutWarnings = fields
+      .filter((field) => field.dynamic)
+      .map((field) => ({
+        code: "DYNAMIC_TYPE" as const,
+        message: "Dynamic size detected. Static realloc analysis may be inaccurate.",
+        account: structBlock.name,
+        field: field.name,
+        type: field.type,
+        filePath
+      }));
 
     accountStructs.push({
+      accountId: `${filePath}::${structBlock.name}`,
       name: structBlock.name,
+      namespace: filePath,
       byteSize: ACCOUNT_DISCRIMINATOR_BYTES + fieldBytes,
       byteSizeIncludesDiscriminator: true,
+      abiFingerprint: abiFingerprint(structBlock.name, fields),
+      hasDynamicSize: layoutWarnings.length > 0,
+      layoutWarnings,
       fields,
       filePath
     });
@@ -88,7 +117,7 @@ function findMatchingBrace(source: string, openBraceIndex: number): number {
   return -1;
 }
 
-function parseNamedFields(body: string): AccountField[] {
+function parseNamedFields(body: string, accountName: string, filePath: string): AccountField[] {
   const fields: AccountField[] = [];
 
   for (const fieldSource of splitTopLevel(body, ",")) {
@@ -111,10 +140,30 @@ function parseNamedFields(body: string): AccountField[] {
     const type = normalizeRustType(fieldMatch[2]);
     const sized = sizeOfRustType(type);
 
+    if (sized.byteSize === null) {
+      throw new AnalysisError(
+        [
+          `Unable to resolve type "${type}"`,
+          `Account: ${accountName}`,
+          `Field: ${fieldMatch[1]}`,
+          `File: ${filePath}`,
+          "",
+          "EPIC cannot safely calculate layout size.",
+          "",
+          "Analysis aborted."
+        ].join("\n"),
+        accountName,
+        fieldMatch[1],
+        type,
+        filePath
+      );
+    }
+
     fields.push({
       name: fieldMatch[1],
       type,
       byteSize: sized.byteSize,
+      dynamic: sized.dynamic,
       ...(sized.note ? { note: sized.note } : {})
     });
   }
@@ -161,6 +210,15 @@ function splitTopLevel(source: string, delimiter: string): string[] {
 
 function normalizeRustType(type: string): string {
   return type.replace(/\s+/g, " ").trim();
+}
+
+function abiFingerprint(accountName: string, fields: AccountField[]): string {
+  const input = JSON.stringify({
+    account: accountName,
+    fields: fields.map((field) => ({ name: field.name, type: field.type }))
+  });
+
+  return createHash("sha256").update(input).digest("hex");
 }
 
 function stripRustComments(source: string): string {

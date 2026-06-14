@@ -1,5 +1,6 @@
 type SizedType = {
   byteSize: number | null;
+  dynamic: boolean;
   note?: string;
 };
 
@@ -26,7 +27,7 @@ export function sizeOfRustType(type: string): SizedType {
   const primitiveSize = PRIMITIVE_SIZES.get(normalizedType);
 
   if (primitiveSize !== undefined) {
-    return { byteSize: primitiveSize };
+    return { byteSize: primitiveSize, dynamic: false };
   }
 
   const array = parseArrayType(normalizedType);
@@ -34,8 +35,12 @@ export function sizeOfRustType(type: string): SizedType {
   if (array) {
     const inner = sizeOfRustType(array.innerType);
     return inner.byteSize === null
-      ? { byteSize: null, note: `unsupported array element type: ${array.innerType}` }
-      : { byteSize: inner.byteSize * array.length };
+      ? { byteSize: null, dynamic: inner.dynamic, note: `unsupported array element type: ${array.innerType}` }
+      : {
+          byteSize: inner.byteSize * array.length,
+          dynamic: inner.dynamic,
+          ...(inner.note ? { note: inner.note } : {})
+        };
   }
 
   const optionInner = parseGenericType(normalizedType, "Option");
@@ -43,23 +48,49 @@ export function sizeOfRustType(type: string): SizedType {
   if (optionInner) {
     const inner = sizeOfRustType(optionInner);
     return inner.byteSize === null
-      ? { byteSize: null, note: `unsupported Option inner type: ${optionInner}` }
-      : { byteSize: 1 + inner.byteSize };
+      ? { byteSize: null, dynamic: inner.dynamic, note: `unsupported Option inner type: ${optionInner}` }
+      : {
+          byteSize: 1 + inner.byteSize,
+          dynamic: inner.dynamic,
+          ...(inner.note ? { note: inner.note } : {})
+        };
   }
 
   const vecInner = parseGenericType(normalizedType, "Vec");
 
   if (vecInner) {
-    return { byteSize: 4, note: `Vec<${vecInner}> is variable length; counted 4-byte length prefix only` };
+    return { byteSize: 4, dynamic: true, note: `Vec<${vecInner}> is dynamically sized; counted 4-byte length prefix only` };
   }
 
-  const stringInner = normalizedType === "String";
-
-  if (stringInner) {
-    return { byteSize: 4, note: "String is variable length; counted 4-byte length prefix only" };
+  if (normalizedType === "String") {
+    return { byteSize: 4, dynamic: true, note: "String is dynamically sized; counted 4-byte length prefix only" };
   }
 
-  return { byteSize: 0, note: `unsupported fixed size type: ${normalizedType}` };
+  const hashMapInner = parseGenericType(normalizedType, "HashMap");
+
+  if (hashMapInner) {
+    return { byteSize: 4, dynamic: true, note: `HashMap<${hashMapInner}> is dynamically sized; counted 4-byte length prefix only` };
+  }
+
+  const hashSetInner = parseGenericType(normalizedType, "HashSet");
+
+  if (hashSetInner) {
+    return { byteSize: 4, dynamic: true, note: `HashSet<${hashSetInner}> is dynamically sized; counted 4-byte length prefix only` };
+  }
+
+  const bTreeMapInner = parseGenericType(normalizedType, "BTreeMap");
+
+  if (bTreeMapInner) {
+    return { byteSize: 4, dynamic: true, note: `BTreeMap<${bTreeMapInner}> is dynamically sized; counted 4-byte length prefix only` };
+  }
+
+  const bTreeSetInner = parseGenericType(normalizedType, "BTreeSet");
+
+  if (bTreeSetInner) {
+    return { byteSize: 4, dynamic: true, note: `BTreeSet<${bTreeSetInner}> is dynamically sized; counted 4-byte length prefix only` };
+  }
+
+  return { byteSize: null, dynamic: false, note: `unsupported fixed size type: ${normalizedType}` };
 }
 
 function parseArrayType(type: string): { innerType: string; length: number } | null {

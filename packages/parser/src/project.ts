@@ -12,17 +12,27 @@ export async function analyzeAnchorProject(projectPath: string): Promise<Analyze
 
   for (const filePath of rustFiles) {
     const source = await readFile(filePath, "utf8");
-    accounts.push(...parseAccountStructs(source, filePath));
+    const parsedAccounts = parseAccountStructs(source, filePath).map((account) => {
+      const namespace = path.relative(resolvedProjectPath, filePath) || path.basename(filePath);
+
+      return {
+        ...account,
+        namespace,
+        accountId: `${namespace}::${account.name}`
+      };
+    });
+
+    accounts.push(...parsedAccounts);
   }
 
   return {
     projectPath: resolvedProjectPath,
     accounts: accounts.sort((left, right) => {
-      if (left.filePath === right.filePath) {
+      if (left.namespace === right.namespace) {
         return left.name.localeCompare(right.name);
       }
 
-      return left.filePath.localeCompare(right.filePath);
+      return left.namespace.localeCompare(right.namespace);
     })
   };
 }
