@@ -1,0 +1,14 @@
+/Users/aksh/Documents/Solana EPIC/packages/parser-v2-spike/target/debug/deps/serde-b5090dfa5fbfe01a.d: /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/aksh/Documents/Solana\ EPIC/packages/parser-v2-spike/target/debug/build/serde-8c3a8118be904d2c/out/private.rs
+
+/Users/aksh/Documents/Solana EPIC/packages/parser-v2-spike/target/debug/deps/libserde-b5090dfa5fbfe01a.rlib: /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/aksh/Documents/Solana\ EPIC/packages/parser-v2-spike/target/debug/build/serde-8c3a8118be904d2c/out/private.rs
+
+/Users/aksh/Documents/Solana EPIC/packages/parser-v2-spike/target/debug/deps/libserde-b5090dfa5fbfe01a.rmeta: /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/aksh/Documents/Solana\ EPIC/packages/parser-v2-spike/target/debug/build/serde-8c3a8118be904d2c/out/private.rs
+
+/Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/Users/aksh/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/Users/aksh/Documents/Solana\ EPIC/packages/parser-v2-spike/target/debug/build/serde-8c3a8118be904d2c/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/aksh/Documents/Solana EPIC/packages/parser-v2-spike/target/debug/build/serde-8c3a8118be904d2c/out
