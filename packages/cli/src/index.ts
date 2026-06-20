@@ -1,297 +1,116 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import {
-  analyzeAnchorProject,
-  compareAnchorProjects,
-  simulateUpgrade,
-  toMachineReadableSimulation,
-  toMachineReadableReport,
-  type AccountDiff,
-  type UpgradeSimulation
-} from "@epic/parser";
+import { compareAnchorPrograms, formatHumanReport } from "@epic/diff-engine";
+import { config } from "@epic/parser";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import fs from "node:fs";
 
 const program = new Command();
 
 program
   .name("epic")
-  .description("EPIC CLI foundation for analyzing Anchor projects.")
+  .description("EPIC CLI for Solana Upgrade Intelligence (powered by parser-v2 Rust AST engine).")
   .version("0.4.0");
+
+import { resolveParserBinary } from "./loader.js";
+
+function findRustBinary(): string {
+  try {
+    return resolveParserBinary();
+  } catch (err: any) {
+    console.error(err.message);
+    process.exit(1);
+  }
+}
 
 program
   .command("analyze")
-  .description("Analyze an Anchor project and report #[account] struct sizes.")
+  .description("Analyze a Solana program workspace and report state account sizes.")
   .argument("<path>", "Path to an Anchor project, Rust source directory, or Rust file")
-  .action(async (targetPath: string) => {
+  .action((targetPath: string) => {
     try {
-      const result = await analyzeAnchorProject(targetPath);
+      const binary = findRustBinary();
+      const resolvedPath = path.resolve(targetPath);
+      
+      const result = spawnSync(binary, [resolvedPath], { encoding: "utf-8" });
+      
+      if (result.error) {
+        throw new Error(`Failed to execute parser-v2 binary: ${result.error.message}`);
+      }
+      
+      if (result.status !== 0) {
+        console.error(result.stderr || `Execution failed with status code ${result.status}`);
+        process.exit(result.status ?? 1);
+      }
 
-      if (result.accounts.length === 0) {
-        console.log("No #[account] structs found.");
+      const report = JSON.parse(result.stdout.trim());
+      
+      console.log(`\n🔍 Analyzing Solana Program Workspace: ${targetPath}`);
+      console.log(`Found ${report.structs_found} structs, ${report.enums_found} enums, ${report.aliases_found} aliases.\n`);
+      
+      if (!report.accounts || report.accounts.length === 0) {
+        console.log("No state accounts (#[account] structures) found.");
         return;
       }
 
-      for (const account of result.accounts) {
-        console.log(`${account.name}: ${account.byteSize} bytes`);
+      console.log("STATE ACCOUNTS:");
+      for (const account of report.accounts) {
+        const layoutType = account.dynamic ? "Dynamic" : "Static";
+        const prefix = account.dynamic ? "⚠️" : "├──";
+        console.log(`${prefix} ${account.account} (${account.size} bytes) [${account.namespace}] [${layoutType}]`);
+        if (account.dynamic) {
+          console.log(`   └─ Warning: Dynamic size detected. Static layout realloc checks may be inaccurate.`);
+        }
       }
+      console.log("");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`epic analyze failed: ${message}`);
-      process.exitCode = 1;
+      process.exit(1);
     }
   });
 
 program
   .command("check")
-  .description("Compare two Anchor project versions and report upgrade readiness.")
-  .argument("<old_path>", "Path to the old Anchor project, Rust source directory, or Rust file")
-  .argument("<new_path>", "Path to the new Anchor project, Rust source directory, or Rust file")
-  .option("--json", "Print machine-readable JSON for CI and integrations")
-  .action(async (oldPath: string, newPath: string, options: { json?: boolean }) => {
+  .description("Compare two Solana program workspace versions and report upgrade readiness.")
+  .option("-c, --config <path>", "Path to epic.toml configuration file")
+  .argument("<old_path>", "Path to the old program version source directory")
+  .argument("<new_path>", "Path to the new program version source directory")
+  .action(async (oldPath: string, newPath: string, options: { config?: string }) => {
     try {
-      const report = await compareAnchorProjects(oldPath, newPath);
+      const resolvedOldPath = path.resolve(oldPath);
+      const resolvedNewPath = path.resolve(newPath);
 
-      if (options.json) {
-        console.log(JSON.stringify(toMachineReadableReport(report), null, 2));
-        return;
+      let epicConfig: config.ResolvedEpicConfig;
+      try {
+        epicConfig = config.loadEpicConfig(options.config);
+      } catch (err: any) {
+        console.error(`epic.toml validation error: ${err.message}`);
+        process.exit(1);
       }
 
-      console.log(formatUpgradeReadinessReport(report.accountDiffs, report.accountsChanged, report.overallRisk));
+      const report = await compareAnchorPrograms(resolvedOldPath, resolvedNewPath, epicConfig);
+
+      console.log(formatHumanReport(report));
+
+      const severityOrder = ["SAFE", "MINOR", "MAJOR", "CRITICAL"];
+      const thresholdIndex = severityOrder.indexOf(epicConfig.failOnSeverity);
+      const reportSeverityIndex = severityOrder.indexOf(report.severity);
+
+      if (thresholdIndex !== -1 && reportSeverityIndex !== -1 && reportSeverityIndex >= thresholdIndex) {
+        console.error(`❌ EPIC Guard Blocked: Upgrade severity is ${report.severity} (threshold: ${epicConfig.failOnSeverity}).`);
+        process.exit(1);
+      } else {
+        console.log(`✅ EPIC Guard Approved Upgrade.`);
+        process.exit(0);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`epic check failed: ${message}`);
-      process.exitCode = 1;
+      process.exit(1);
     }
   });
 
-program
-  .command("simulate")
-  .description("Simulate a program upgrade using EPIC's static upgrade engine.")
-  .argument("<old_path>", "Path to the old Anchor project, Rust source directory, or Rust file")
-  .argument("<new_path>", "Path to the new Anchor project, Rust source directory, or Rust file")
-  .option("--json", "Print machine-readable JSON for CI and future Bankrun integrations")
-  .action(async (oldPath: string, newPath: string, options: { json?: boolean }) => {
-    try {
-      const simulation = await simulateUpgrade(oldPath, newPath);
-
-      if (options.json) {
-        console.log(JSON.stringify(toMachineReadableSimulation(simulation), null, 2));
-        return;
-      }
-
-      console.log(formatUpgradeSimulation(simulation));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`epic simulate failed: ${message}`);
-      process.exitCode = 1;
-    }
-  });
-
-await program.parseAsync(process.argv);
-
-function formatUpgradeReadinessReport(
-  accountDiffs: AccountDiff[],
-  accountsChanged: number,
-  overallRisk: string
-): string {
-  const lines: string[] = [
-    "====================================",
-    "EPIC Upgrade Readiness Report",
-    "",
-    `Accounts Changed: ${accountsChanged}`
-  ];
-
-  for (const diff of accountDiffs) {
-    lines.push("", diff.name, "");
-
-    if (diff.oldSize !== null) {
-      lines.push(`Old Size: ${diff.oldSize}`);
-    }
-
-    if (diff.newSize !== null) {
-      lines.push(`New Size: ${diff.newSize}`);
-    }
-
-    if (diff.sizeDelta !== null) {
-      lines.push(`Size Delta: ${formatSignedBytes(diff.sizeDelta)}`);
-    }
-
-    lines.push(`Additional Bytes Required: ${diff.additionalBytesRequired}`);
-    lines.push(`ABI Fingerprint Changed: ${diff.abiFingerprintChanged ? "YES" : "NO"}`);
-
-    if (diff.fieldReordered) {
-      lines.push("Reason: Field Reorder Detected");
-    }
-
-    if (diff.reasons.length > 0) {
-      lines.push("", "Reasons:");
-      for (const reason of diff.reasons) {
-        lines.push(`* ${reason}`);
-      }
-    }
-
-    if (diff.addedFields.length > 0) {
-      lines.push("", "Added:");
-      for (const field of diff.addedFields) {
-        lines.push(`* ${field.name} (${field.type})`);
-      }
-    }
-
-    if (diff.removedFields.length > 0) {
-      lines.push("", "Removed:");
-      for (const field of diff.removedFields) {
-        lines.push(`* ${field.name} (${field.type})`);
-      }
-    }
-
-    if (diff.typeChangedFields.length > 0) {
-      lines.push("", "Type Changes:");
-      for (const field of diff.typeChangedFields) {
-        lines.push(`* ${field.name}: ${field.oldType} -> ${field.newType}`);
-      }
-    }
-
-    if (diff.layoutWarnings.length > 0) {
-      lines.push("", "WARNING:", "Dynamic size detected.", "", "Static realloc analysis may be inaccurate.");
-      for (const warning of diff.layoutWarnings) {
-        lines.push(`* ${warning.account}.${warning.field} (${warning.type})`);
-      }
-    }
-
-    lines.push(
-      "",
-      `Migration Required: ${diff.migrationRequired ? "YES" : "NO"}`,
-      "",
-      `Risk Level: ${diff.riskLevel}`,
-      `Migration Complexity: ${diff.complexity}`,
-      "",
-      `Realloc Required: ${diff.realloc.required ? "YES" : "NO"}`
-    );
-
-    if (diff.realloc.suggestedAction) {
-      lines.push(
-        "",
-        "Suggested Action:",
-        "",
-        diff.realloc.suggestedAction
-      );
-    }
-
-    lines.push(
-      "",
-      `Rent Impact: ${diff.rentImpact.status}`,
-      `Estimated Additional Bytes: ${diff.rentImpact.estimatedAdditionalBytes}`,
-      `Future Hook: ${diff.rentImpact.futureHook}`,
-      "",
-      "Recommended Upgrade Plan"
-    );
-
-    diff.upgradePlan.forEach((step, index) => {
-      lines.push(`${index + 1}. ${step}`);
-    });
-
-    if (diff.recommendations.length > 0) {
-      lines.push("", "Recommended Actions:");
-      for (const recommendation of diff.recommendations) {
-        lines.push(`* ${recommendation}`);
-      }
-    }
-  }
-
-  if (accountDiffs.length === 0) {
-    lines.push("", "No account layout changes detected.");
-  }
-
-  lines.push("", "====================================", `Overall Risk: ${overallRisk}`);
-  return lines.join("\n");
-}
-
-function formatSignedBytes(delta: number): string {
-  if (delta > 0) {
-    return `+${delta}`;
-  }
-
-  return String(delta);
-}
-
-function formatUpgradeSimulation(simulation: UpgradeSimulation): string {
-  const lines: string[] = [
-    "====================================",
-    "EPIC Upgrade Simulation",
-    "",
-    `Simulation Mode: ${simulation.mode}`,
-    `Simulation Adapter: ${simulation.adapter}`,
-    `Affected Accounts: ${simulation.affectedAccounts.length}`,
-    `Risk Level: ${simulation.riskLevel}`,
-    `Risk Score: ${simulation.riskScore}`,
-    "",
-    "Estimated Rent Increase:",
-    `Additional Bytes: ${simulation.estimatedRentIncrease.additionalBytes}`,
-    `Exact Lamports: ${simulation.estimatedRentIncrease.exactLamports ?? "Unavailable"}`,
-    `Calculation Mode: ${simulation.estimatedRentIncrease.calculationMode}`,
-    `Future Hook: ${simulation.estimatedRentIncrease.futureHook}`,
-    "",
-    "Affected Accounts"
-  ];
-
-  if (simulation.affectedAccounts.length === 0) {
-    lines.push("No account layout changes detected.");
-  }
-
-  for (const account of simulation.affectedAccounts) {
-    lines.push(
-      "",
-      account.name,
-      `Status: ${account.status}`,
-      `Old Size: ${account.oldSize ?? "N/A"}`,
-      `New Size: ${account.newSize ?? "N/A"}`,
-      `Size Delta: ${account.sizeDelta === null ? "N/A" : formatSignedBytes(account.sizeDelta)}`,
-      `Migration Required: ${account.migrationRequired ? "YES" : "NO"}`,
-      `Complexity: ${account.complexity}`,
-      `Risk: ${account.riskLevel}`
-    );
-  }
-
-  lines.push("", "Realloc Requirements");
-
-  const reallocRequirements = simulation.reallocRequirements.filter((requirement) => requirement.required);
-
-  if (reallocRequirements.length === 0) {
-    lines.push("No realloc required.");
-  }
-
-  for (const requirement of reallocRequirements) {
-    lines.push(
-      "",
-      requirement.account,
-      `Required: YES`,
-      `Old Size: ${requirement.oldSize ?? "N/A"}`,
-      `New Size: ${requirement.newSize ?? "N/A"}`,
-      `Additional Bytes Required: ${requirement.additionalBytesRequired}`
-    );
-
-    if (requirement.suggestedAction) {
-      lines.push("", "Suggested Action:", "", requirement.suggestedAction);
-    }
-  }
-
-  lines.push("", "Migration Plan");
-
-  if (simulation.migrationPlan.length === 0) {
-    lines.push("No migration steps required.");
-  } else {
-    simulation.migrationPlan.forEach((step, index) => {
-      lines.push(`${index + 1}. ${step}`);
-    });
-  }
-
-  lines.push(
-    "",
-    "Bankrun Integration",
-    `Ready: ${simulation.bankrunReady ? "YES" : "NO"}`,
-    `Hook: ${simulation.bankrunHook}`,
-    "",
-    "===================================="
-  );
-
-  return lines.join("\n");
-}
+program.parse(process.argv);

@@ -1,0 +1,21 @@
+{
+  "name": "@epic/cli-linux-x64",
+  "version": "0.1.0-beta.1",
+  "description": "Prebuilt linux-x64 binary of parser-v2 for EPIC CLI",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/parser-v2"
+  ],
+  "exports": {
+    ".": "./bin/parser-v2"
+  }
+}

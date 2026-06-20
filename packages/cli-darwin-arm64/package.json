@@ -1,0 +1,21 @@
+{
+  "name": "@epic/cli-darwin-arm64",
+  "version": "0.1.0-beta.1",
+  "description": "Prebuilt darwin-arm64 binary of parser-v2 for EPIC CLI",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "bin/parser-v2"
+  ],
+  "exports": {
+    ".": "./bin/parser-v2"
+  }
+}

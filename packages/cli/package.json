@@ -1,8 +1,11 @@
 {
   "name": "@epic/cli",
-  "version": "0.4.0",
+  "version": "0.1.0-beta.1",
   "private": true,
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "bin": {
     "epic": "./dist/index.js"
   },
@@ -11,11 +14,19 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@epic/parser": "0.4.0",
+    "@epic/diff-engine": "^0.1.0-beta.1",
+    "@epic/parser": "^0.1.0-beta.1",
     "commander": "^14.0.0"
+  },
+  "optionalDependencies": {
+    "@epic/cli-darwin-arm64": "^0.1.0-beta.1",
+    "@epic/cli-darwin-x64": "^0.1.0-beta.1",
+    "@epic/cli-linux-x64": "^0.1.0-beta.1",
+    "@epic/cli-win32-x64": "^0.1.0-beta.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.29",

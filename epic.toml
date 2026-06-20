@@ -1,0 +1,48 @@
+# ==============================================================================
+# EPIC Configuration Template - epic.toml
+# ==============================================================================
+
+[workspace]
+# Source of truth for comparison. "ast" (Rust source) or "idl" (Anchor JSON)
+compare_mode = "ast"
+
+# Minimum severity to trigger non-zero exit code (CI failure)
+# Options: "SAFE", "MINOR", "MAJOR", "CRITICAL"
+fail_on_severity = "MAJOR"
+
+# RPC Endpoint to fetch on-chain account sizes for comparison
+rpc_url = "https://api.mainnet-beta.solana.com"
+
+# Exclude paths from static layout analysis
+exclude_paths = [
+    "**/tests/**",
+    "**/mocks/**",
+    "**/target/**",
+    "**/node_modules/**"
+]
+
+# Require standardized padding names (e.g. reserved or padding)
+enforce_padding = true
+
+[programs.marginfi]
+path = "./programs/marginfi"
+id = "MFv28xrwG2k1GZnhwYhcz1GL9G7gW4mh99PP5zER6NL"
+
+[[programs.marginfi.overrides]]
+account = "Bank"
+finding = "PADDING_REPURPOSE"
+field = "reserved"
+action = "allow"
+note = "Verified byte layouts align exactly with padding. Replaced reserved: [u8; 64] with new_stat: u64."
+
+[programs.drift]
+path = "./programs/drift"
+id = "dRifv2G2XadHceee5mK3dB6vJ61g2QskXn8o1sBDR1B"
+
+[[programs.drift.overrides]]
+account = "User"
+finding = "FIELD_ADDED"
+field = "maker_rebate"
+action = "downgrade"
+severity = "MINOR"
+note = "User account has 4000+ bytes of pre-allocated padding. Appending trailing field is safe."
