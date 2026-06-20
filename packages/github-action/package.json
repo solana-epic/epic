@@ -1,0 +1,23 @@
+{
+  "name": "@epic/github-action",
+  "version": "0.1.0-beta.1",
+  "description": "Solana EPIC Upgrade Guard GitHub Action",
+  "private": true,
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/index.js",
+    "prepublishOnly": "npm run build",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0",
+    "@epic/diff-engine": "^0.1.0-beta.1",
+    "@epic/parser": "^0.1.0-beta.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.1",
+    "typescript": "^5.3.3"
+  }
+}

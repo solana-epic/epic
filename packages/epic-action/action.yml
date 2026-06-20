@@ -1,0 +1,44 @@
+name: 'Solana EPIC Upgrade Guard'
+description: 'Analyze Solana program upgrade impact and verify ABI stability'
+inputs:
+  old_path:
+    description: 'Path to the old program version source directory'
+    required: true
+  new_path:
+    description: 'Path to the new program version source directory'
+    required: true
+outputs:
+  severity:
+    description: 'The overall upgrade severity (Safe, Minor, Major, Critical)'
+    value: ${{ steps.run-epic.outputs.severity }}
+  risk_category:
+    description: 'The classified risk categories'
+    value: ${{ steps.run-epic.outputs.risk_category }}
+  migration_required:
+    description: 'Whether a state migration is required'
+    value: ${{ steps.run-epic.outputs.migration_required }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Run EPIC CLI
+      id: run-epic
+      shell: bash
+      run: |
+        # Build and run the parser-v2 Rust binary
+        cargo run --manifest-path ${{ github.action_path }}/../parser-v2/Cargo.toml --bin parser-v2 -- "${{ inputs.old_path }}" "${{ inputs.new_path }}"
+        
+        # Capture step summary
+        if [ -f epic-report.md ]; then
+          cat epic-report.md >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Read JSON report to output variables
+        if [ -f epic-report.json ]; then
+          SEVERITY=$(jq -r '.severity' epic-report.json)
+          RISK_CATEGORY=$(jq -r '.risk_category' epic-report.json)
+          MIGRATION_REQUIRED=$(jq -r '.migration_required' epic-report.json)
+          
+          echo "severity=$SEVERITY" >> $GITHUB_OUTPUT
+          echo "risk_category=$RISK_CATEGORY" >> $GITHUB_OUTPUT
+          echo "migration_required=$MIGRATION_REQUIRED" >> $GITHUB_OUTPUT
+        fi

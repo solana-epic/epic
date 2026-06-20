@@ -1,0 +1,25 @@
+name: 'Solana EPIC Upgrade Guard'
+description: 'Analyze Solana program upgrade impact and verify state layout compatibility'
+author: 'Solana EPIC'
+inputs:
+  github_token:
+    description: 'GitHub Token for posting pull request comments (e.g. ${{ secrets.GITHUB_TOKEN }})'
+    required: true
+  old_path:
+    description: 'Path to the old program version (source directory or JSON IDL file)'
+    required: true
+  new_path:
+    description: 'Path to the new program version (source directory or JSON IDL file)'
+    required: true
+  fail_on_severity:
+    description: 'Minimum severity level to trigger a non-zero exit code (Safe, Minor, Major, Critical)'
+    required: false
+    default: 'Critical'
+outputs:
+  severity:
+    description: 'Overall upgrade severity (Safe, Minor, Major, Critical)'
+  findings_count:
+    description: 'Number of detected upgrade findings'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
