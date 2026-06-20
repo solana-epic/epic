@@ -1,0 +1,38 @@
+name: EPIC Upgrade Guard CI
+
+on:
+  pull_request:
+    paths:
+      - 'programs/**'
+      - 'Cargo.toml'
+
+jobs:
+  epic-check:
+    name: Verify ABI Stability
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Current Commit
+        uses: actions/checkout@v4
+        with:
+          path: src-new
+
+      - name: Checkout Previous Commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: src-old
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run EPIC Upgrade Guard
+        uses: ./src-new/packages/epic-action
+        with:
+          old_path: src-old
+          new_path: src-new
+
+      - name: Upload EPIC JSON Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: epic-report
+          path: epic-report.json

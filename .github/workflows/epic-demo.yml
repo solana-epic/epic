@@ -1,0 +1,176 @@
+name: EPIC Action Demo
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  epic-demo:
+    name: Verify Upgrade Safety & Fail-Closed Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Create Demo Fixtures
+        run: |
+          mkdir -p demo-fixtures/old_program
+          mkdir -p demo-fixtures/new_program_safe
+          mkdir -p demo-fixtures/new_program_critical
+          
+          # Write old program version
+          cat << 'EOF' > demo-fixtures/old_program/lib.rs
+          use anchor_lang::prelude::*;
+          
+          declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+          
+          #[program]
+          pub mod epic_demo {
+              use super::*;
+              pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+                  Ok(())
+              }
+          }
+          
+          #[account]
+          pub struct UserState {
+              pub authority: Pubkey,
+              pub balance: u64,
+          }
+          
+          #[derive(Accounts)]
+          pub struct Initialize<'info> {
+              #[account(init, payer = user, space = 8 + 32 + 8)]
+              pub state: Account<'info, UserState>,
+              #[account(mut)]
+              pub user: Signer<'info>,
+              pub system_program: Program<'info, System>,
+          }
+          EOF
+          
+          # Write new program version (Safe Change: Appended field, added instruction)
+          cat << 'EOF' > demo-fixtures/new_program_safe/lib.rs
+          use anchor_lang::prelude::*;
+          
+          declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+          
+          #[program]
+          pub mod epic_demo {
+              use super::*;
+              pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+                  Ok(())
+              }
+              pub fn update(ctx: Context<Update>) -> Result<()> {
+                  Ok(())
+              }
+          }
+          
+          #[account]
+          pub struct UserState {
+              pub authority: Pubkey,
+              pub balance: u64,
+              pub referral_code: u64, // Appended field is safe/minor expansion
+          }
+          
+          #[derive(Accounts)]
+          pub struct Initialize<'info> {
+              #[account(init, payer = user, space = 8 + 32 + 8 + 8)]
+              pub state: Account<'info, UserState>,
+              #[account(mut)]
+              pub user: Signer<'info>,
+              pub system_program: Program<'info, System>,
+          }
+          
+          #[derive(Accounts)]
+          pub struct Update<'info> {
+              pub user: Signer<'info>,
+          }
+          EOF
+          
+          # Write new program version (Critical Change: Removed field, shifting deserialization offsets)
+          cat << 'EOF' > demo-fixtures/new_program_critical/lib.rs
+          use anchor_lang::prelude::*;
+          
+          declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+          
+          #[program]
+          pub mod epic_demo {
+              use super::*;
+              pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+                  Ok(())
+              }
+          }
+          
+          #[account]
+          pub struct UserState {
+              // authority is removed! This shifts balance offset and breaks deserialization.
+              pub balance: u64,
+          }
+          
+          #[derive(Accounts)]
+          pub struct Initialize<'info> {
+              #[account(init, payer = user, space = 8 + 8)]
+              pub state: Account<'info, UserState>,
+              #[account(mut)]
+              pub user: Signer<'info>,
+              pub system_program: Program<'info, System>,
+          }
+          EOF
+
+      - name: Build parser-v2
+        run: cargo build -p parser-v2 --bin parser-v2
+
+      - name: Run EPIC on Safe Upgrade (Expecting Exit Code 0)
+        id: run-safe
+        uses: ./packages/epic-action
+        with:
+          old_path: ./demo-fixtures/old_program
+          new_path: ./demo-fixtures/new_program_safe
+
+      - name: Verify Safe Outputs and Preserve Report
+        run: |
+          if [ ! -f epic-report.json ] || [ ! -f epic-report.md ]; then
+            echo "❌ Error: EPIC safe report files not generated."
+            exit 1
+          fi
+          echo "✅ Verified: Safe upgrade completed successfully and reports generated."
+          cp epic-report.json epic-report-safe.json
+          cp epic-report.md epic-report-safe.md
+
+      - name: Run EPIC on Critical Upgrade (Expecting Exit Code 1)
+        id: run-critical
+        continue-on-error: true
+        uses: ./packages/epic-action
+        with:
+          old_path: ./demo-fixtures/old_program
+          new_path: ./demo-fixtures/new_program_critical
+
+      - name: Verify Critical Exit Code and Preserve Report
+        run: |
+          if [ "${{ steps.run-critical.outcome }}" != "failure" ]; then
+            echo "❌ Error: EPIC did not block the critical upgrade (expected failure/exit-1, got success)."
+            exit 1
+          fi
+          if [ ! -f epic-report.json ] || [ ! -f epic-report.md ]; then
+            echo "❌ Error: EPIC critical report files not generated."
+            exit 1
+          fi
+          echo "✅ Verified: EPIC successfully blocked the critical upgrade (Exit Code 1)."
+          cp epic-report.json epic-report-critical.json
+          cp epic-report.md epic-report-critical.md
+
+      - name: Upload EPIC Demo Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: epic-demo-reports
+          path: |
+            epic-report-safe.json
+            epic-report-safe.md
+            epic-report-critical.json
+            epic-report-critical.md

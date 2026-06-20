@@ -1,6 +1,6 @@
 {
   "name": "epic",
-  "version": "0.4.0",
+  "version": "0.1.0-beta.1",
   "private": true,
   "description": "EPIC CLI foundation for analyzing Anchor projects.",
   "scripts": {

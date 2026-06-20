@@ -3,5 +3,10 @@ dist
 .turbo
 *.tsbuildinfo
 .DS_Store
-test-repos/\n.agents/\n*.jsonl\nsession.txt
-**/target/\n*.err\n*.json
+test-repos/
+.agents/
+*.jsonl
+session.txt
+**/target/
+*.err
+*.json
