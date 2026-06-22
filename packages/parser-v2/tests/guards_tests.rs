@@ -154,3 +154,64 @@ fn test_extract_guards_from_anchor_accounts() {
         }),
     }));
 }
+
+#[test]
+fn test_extract_guards_with_anchor_errors() {
+    let accounts_struct = StructDef {
+        name: "Initialize".to_string(),
+        is_account: false,
+        fields: vec![
+            FieldDef {
+                name: "vault".to_string(),
+                type_ref: TypeRef::Custom("Account<'info, VaultState>".to_string()),
+                attrs: vec!["#[account(owner = program_id @ ErrorCode::InvalidOwner)]".to_string()],
+            },
+            FieldDef {
+                name: "user".to_string(),
+                type_ref: TypeRef::Custom("Signer<'info>".to_string()),
+                attrs: vec!["#[account(signer @ ErrorCode::InvalidSigner)]".to_string()],
+            },
+            FieldDef {
+                name: "pda_vault".to_string(),
+                type_ref: TypeRef::Custom("Account<'info, VaultState>".to_string()),
+                attrs: vec![
+                    "#[account(seeds = [b\"vault\"], bump @ ErrorCode::InvalidBump)]".to_string(),
+                ],
+            },
+        ],
+        attrs: vec!["#[derive(Accounts)]".to_string()],
+    };
+
+    let mut symbol_table = HashMap::new();
+    let mut next_symbol_id = 1;
+
+    let facts_provenance = extract_guards_from_accounts_struct(
+        &accounts_struct,
+        &mut symbol_table,
+        &mut next_symbol_id,
+    );
+
+    let facts: Vec<GuardFact> = facts_provenance.into_iter().map(|(f, _)| f).collect();
+    println!("FACTS WITH ERRORS: {:#?}", facts);
+
+    let user_symbol = *symbol_table.get("user").unwrap();
+    let vault_symbol = *symbol_table.get("vault").unwrap();
+    let pda_vault_symbol = *symbol_table.get("pda_vault").unwrap();
+
+    // 1. Check vault owner validation parsed correctly (not dropped!)
+    assert!(facts.contains(&GuardFact::Owner {
+        account: GuardTarget::Account(vault_symbol),
+        expected_owner: FactExpression::Literal("program_id".to_string()),
+    }));
+
+    // 2. Check user signer constraint parsed correctly (not dropped!)
+    assert!(facts.contains(&GuardFact::Signer(GuardTarget::Account(user_symbol))));
+
+    // 3. Check pda_vault seeds parsed correctly (not dropped!)
+    assert!(facts.iter().any(|f| match f {
+        GuardFact::PDA { account, .. } => {
+            account == &GuardTarget::Account(pda_vault_symbol)
+        }
+        _ => false,
+    }));
+}

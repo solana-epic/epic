@@ -195,3 +195,43 @@ fn test_ambiguous_type_resolution() {
         InferenceResult::Inconclusive(InconclusiveReason::AmbiguousType("VaultState".to_string()))
     );
 }
+
+#[test]
+fn test_resolve_ambiguous_by_imports() {
+    let mut registry = TypeRegistry::new();
+
+    let def1 = TypeDef::Struct(StructDef {
+        name: "LastUpdate".to_string(),
+        is_account: false,
+        fields: vec![],
+        attrs: vec![],
+    });
+    let def2 = TypeDef::Struct(StructDef {
+        name: "LastUpdate".to_string(),
+        is_account: false,
+        fields: vec![],
+        attrs: vec![],
+    });
+
+    registry.insert("program::common::LastUpdate".to_string(), def1);
+    registry.insert("program::last_update::LastUpdate".to_string(), def2);
+
+    let temp_dir = std::env::temp_dir();
+    let temp_file_path = temp_dir.join("test_reserve.rs");
+    let file_content = r#"
+        use crate::common::LastUpdate;
+        use crate::state::Reserve;
+    "#;
+    std::fs::write(&temp_file_path, file_content).unwrap();
+
+    registry.file_paths.insert(
+        "program::state::reserve::Reserve".to_string(),
+        temp_file_path.to_string_lossy().into_owned(),
+    );
+
+    let resolved = registry.resolve_absolute_path("program::state::reserve", "LastUpdate").unwrap();
+
+    let _ = std::fs::remove_file(temp_file_path);
+
+    assert_eq!(resolved, "program::common::LastUpdate");
+}

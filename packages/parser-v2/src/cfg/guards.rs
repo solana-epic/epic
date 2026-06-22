@@ -184,6 +184,42 @@ enum ParsedAttributeMeta {
     Payer(syn::Expr),
 }
 
+fn preprocess_anchor_attribute_string(body: &str) -> String {
+    let mut result = String::new();
+    let mut depth: usize = 0;
+    let mut skipping = false;
+
+    for c in body.chars() {
+        match c {
+            '(' | '[' | '{' => {
+                depth += 1;
+                if !skipping {
+                    result.push(c);
+                }
+            }
+            ')' | ']' | '}' => {
+                depth = depth.saturating_sub(1);
+                if !skipping {
+                    result.push(c);
+                }
+            }
+            '@' if depth == 0 => {
+                skipping = true;
+            }
+            ',' if depth == 0 => {
+                skipping = false;
+                result.push(c);
+            }
+            _ => {
+                if !skipping {
+                    result.push(c);
+                }
+            }
+        }
+    }
+    result
+}
+
 fn parse_anchor_attribute_string(attr_str: &str) -> Vec<ParsedAttributeMeta> {
     let mut results = Vec::new();
 
@@ -196,8 +232,10 @@ fn parse_anchor_attribute_string(attr_str: &str) -> Vec<ParsedAttributeMeta> {
         attr_str
     };
 
+    let body_preprocessed = preprocess_anchor_attribute_string(body);
+
     // Preprocess: Replace standalone "mut" keyword with "writable" to avoid syn syntax error
-    let parts: Vec<String> = body
+    let parts: Vec<String> = body_preprocessed
         .split(',')
         .map(|s| {
             let trimmed = s.trim();

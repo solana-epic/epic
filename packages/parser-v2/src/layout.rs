@@ -25,25 +25,7 @@ impl<'a> LayoutEngine<'a> {
     }
 
     pub fn resolve_absolute_path(&self, current_module: &str, ident: &str) -> Result<String> {
-        let direct_path = format!("{}::{}", current_module, ident);
-        if self.registry.definitions.contains_key(&direct_path) {
-            return Ok(direct_path);
-        }
-
-        let mut matches = Vec::new();
-        for key in self.registry.definitions.keys() {
-            if key.ends_with(&format!("::{}", ident)) || key == ident {
-                matches.push(key.clone());
-            }
-        }
-
-        if matches.is_empty() {
-            bail!("Unknown type: {}", ident);
-        } else if matches.len() > 1 {
-            bail!("Ambiguous type: {} matches {:?}", ident, matches);
-        } else {
-            Ok(matches[0].clone())
-        }
+        self.registry.resolve_absolute_path(current_module, ident)
     }
 
     pub fn size_of_type_ref(&mut self, current_module: &str, ty: &TypeRef) -> Result<LayoutInfo> {

@@ -229,7 +229,7 @@ pub fn run_audit(root_path: &str) -> anyhow::Result<Vec<RuleDiagnostic>> {
 
             let mod_path_refs: Vec<&str> = module_path.iter().map(|s| s.as_str()).collect();
             // Add file to Workspace registry so struct layouts are loaded
-            if let Err(_) = workspace.add_file(&program_name, &mod_path_refs, &content) {
+            if let Err(_) = workspace.add_file(&program_name, &mod_path_refs, &content, Some(&file_path.to_string_lossy())) {
                 // Skip files with invalid syntax to keep scanning robust
                 continue;
             }

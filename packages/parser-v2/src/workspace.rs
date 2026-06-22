@@ -13,6 +13,36 @@ pub struct Workspace {
 struct FileVisitor<'a> {
     current_module_path: Vec<String>,
     registry: &'a mut TypeRegistry,
+    file_path: Option<String>,
+}
+
+impl<'a> FileVisitor<'a> {
+    fn insert_def(&mut self, name: String, def: TypeDef) {
+        let mut path = self.current_module_path.clone();
+        path.push(name.clone());
+        let abs_path = path.join("::");
+        self.registry.insert(abs_path.clone(), def);
+        self.registry.module_paths.insert(abs_path.clone(), self.current_module_path.clone());
+        self.registry.symbol_names.insert(abs_path.clone(), name);
+        if let Some(ref fp) = self.file_path {
+            self.registry.file_paths.insert(abs_path, fp.clone());
+        }
+    }
+
+    fn insert_instruction_def(&mut self, mod_name: &str, name: String, def: TypeDef) {
+        let mut path = self.current_module_path.clone();
+        path.push(mod_name.to_string());
+        path.push(name.clone());
+        let abs_path = path.join("::");
+        self.registry.insert(abs_path.clone(), def);
+        let mut mod_path = self.current_module_path.clone();
+        mod_path.push(mod_name.to_string());
+        self.registry.module_paths.insert(abs_path.clone(), mod_path);
+        self.registry.symbol_names.insert(abs_path.clone(), name);
+        if let Some(ref fp) = self.file_path {
+            self.registry.file_paths.insert(abs_path, fp.clone());
+        }
+    }
 }
 
 impl<'a, 'ast> Visit<'ast> for FileVisitor<'a> {
@@ -54,9 +84,7 @@ impl<'a, 'ast> Visit<'ast> for FileVisitor<'a> {
             attrs: struct_attrs,
         });
 
-        let mut path = self.current_module_path.clone();
-        path.push(name);
-        self.registry.insert(path.join("::"), def);
+        self.insert_def(name, def);
     }
 
     fn visit_item_enum(&mut self, i: &'ast ItemEnum) {
@@ -94,9 +122,7 @@ impl<'a, 'ast> Visit<'ast> for FileVisitor<'a> {
             variants,
         });
 
-        let mut path = self.current_module_path.clone();
-        path.push(name);
-        self.registry.insert(path.join("::"), def);
+        self.insert_def(name, def);
     }
 
     fn visit_item_type(&mut self, i: &'ast ItemType) {
@@ -108,9 +134,7 @@ impl<'a, 'ast> Visit<'ast> for FileVisitor<'a> {
             target,
         });
 
-        let mut path = self.current_module_path.clone();
-        path.push(name);
-        self.registry.insert(path.join("::"), def);
+        self.insert_def(name, def);
     }
 
     fn visit_item_mod(&mut self, i: &'ast syn::ItemMod) {
@@ -142,10 +166,7 @@ impl<'a, 'ast> Visit<'ast> for FileVisitor<'a> {
                             args,
                         });
 
-                        let mut path = self.current_module_path.clone();
-                        path.push(i.ident.to_string());
-                        path.push(name);
-                        self.registry.insert(path.join("::"), def);
+                        self.insert_instruction_def(&i.ident.to_string(), name, def);
                     }
                 }
             }
@@ -229,6 +250,7 @@ impl Workspace {
         program_name: &str,
         module_path: &[&str],
         source: &str,
+        file_path: Option<&str>,
     ) -> anyhow::Result<()> {
         let file = syn::parse_str::<syn::File>(source)?;
         let mut full_path = vec![program_name.to_string()];
@@ -239,6 +261,7 @@ impl Workspace {
         let mut visitor = FileVisitor {
             current_module_path: full_path,
             registry: &mut self.registry,
+            file_path: file_path.map(|s| s.to_string()),
         };
 
         visitor.visit_file(&file);

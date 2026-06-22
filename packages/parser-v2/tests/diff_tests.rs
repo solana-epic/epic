@@ -5,12 +5,12 @@ use parser_v2::{
 fn run_diff(old_source: &str, new_source: &str) -> Vec<DiffResult> {
     let mut old_ws = Workspace::new();
     old_ws
-        .add_file("program", &["test_mod"], old_source)
+        .add_file("program", &["test_mod"], old_source, None)
         .unwrap();
 
     let mut new_ws = Workspace::new();
     new_ws
-        .add_file("program", &["test_mod"], new_source)
+        .add_file("program", &["test_mod"], new_source, None)
         .unwrap();
 
     compare_workspaces(&old_ws, &new_ws)

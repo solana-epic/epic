@@ -52,7 +52,7 @@ fn build_workspace_from_path(root: &str) -> anyhow::Result<Workspace> {
                 .unwrap()
                 .to_string_lossy()
                 .into_owned();
-            workspace.add_file("program", &[&file_stem], &content)?;
+            workspace.add_file("program", &[&file_stem], &content, Some(&entry.path().to_string_lossy()))?;
         }
     }
     Ok(workspace)

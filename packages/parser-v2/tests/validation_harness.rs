@@ -84,13 +84,13 @@ fn test_historical_upgrades_harness() {
         let mut old_ws = Workspace::new();
         if let Some(content) = get_git_file_content(case.repo_path, case.old_commit, case.file_path)
         {
-            old_ws.add_file("program", &["state"], &content).unwrap();
+            old_ws.add_file("program", &["state"], &content, None).unwrap();
         }
 
         let mut new_ws = Workspace::new();
         if let Some(content) = get_git_file_content(case.repo_path, case.new_commit, case.file_path)
         {
-            new_ws.add_file("program", &["state"], &content).unwrap();
+            new_ws.add_file("program", &["state"], &content, None).unwrap();
         }
 
         let diffs = compare_workspaces(&old_ws, &new_ws);

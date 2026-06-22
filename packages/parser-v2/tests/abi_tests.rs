@@ -3,7 +3,7 @@ use parser_v2::{abi::AbiEngine, Workspace};
 fn get_fingerprint(source: &str, struct_name: &str) -> String {
     let mut workspace = Workspace::new();
     workspace
-        .add_file("program", &["test_mod"], source)
+        .add_file("program", &["test_mod"], source, None)
         .unwrap();
 
     let mut abi_engine = AbiEngine::new(&workspace.registry);
