@@ -451,7 +451,8 @@ pub fn convert_expr(expr: &syn::Expr) -> ExpressionNode {
 }
 
 pub fn convert_stmt(stmt: &syn::Stmt) -> StatementNode {
-    let line_number = 0;
+    use syn::spanned::Spanned;
+    let line_number = stmt.span().start().line;
     let kind = match stmt {
         syn::Stmt::Local(local) => {
             let name = if let syn::Pat::Ident(pat_ident) = &local.pat {

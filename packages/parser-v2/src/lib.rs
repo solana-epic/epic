@@ -3,6 +3,7 @@ pub mod ast;
 pub mod cfg;
 pub mod impact;
 pub mod layout;
+pub mod audit;
 pub mod report;
 pub mod rules;
 pub mod types;
@@ -24,7 +25,8 @@ pub use impact::{
     analyze_impact, format_impact_terminal, generate_aggregated_impact, ImpactAnalysis,
 };
 pub use rules::{
-    DominanceChecker, FindingLocation, OwnerValidationRule, Rule, RuleDiagnostic, RuleEngine,
-    RuleSeverity, SymbolResolver,
+    AnalysisContext, DominanceChecker, FindingLocation, IdlMetadata, OwnerValidationRule,
+    ProgramMetadata, Rule, RuleDiagnostic, RuleEngine, RuleMetadata, RuleSeverity, SymbolResolver,
 };
 pub use workspace::Workspace;
+pub use audit::{run_audit, extract_context_struct_name, RawFunction, RawFunctionVisitor};

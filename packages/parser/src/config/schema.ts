@@ -36,5 +36,6 @@ export const EpicConfigSchema = z.object({
     exclude_paths: z.array(z.string()).default([]),
     enforce_padding: z.boolean().default(false)
   }).default({}),
-  programs: z.record(z.string(), ProgramConfigSchema).default({})
+  programs: z.record(z.string(), ProgramConfigSchema).default({}),
+  ignore: z.array(z.string()).default([])
 });

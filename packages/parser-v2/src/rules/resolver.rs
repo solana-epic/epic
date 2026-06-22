@@ -10,14 +10,17 @@ pub struct SymbolResolver {
     pub name_to_symbol: HashMap<String, SymbolId>,
     /// Union-Find equivalence set to track variable aliasing.
     pub equivalence_relations: HashMap<SymbolId, SymbolId>,
+    /// The name of the Context variable parameter (usually "ctx" or "c").
+    pub context_var_name: String,
 }
 
 impl SymbolResolver {
     pub fn new(context: &InstructionAnalysisContext) -> Self {
         let mut resolver = Self {
             version_to_symbol: HashMap::new(),
-            name_to_symbol: HashMap::new(),
+            name_to_symbol: context.symbol_table.clone(),
             equivalence_relations: HashMap::new(),
+            context_var_name: context.context_var_name.clone(),
         };
         resolver.initialize_parameter_mappings(context);
         resolver
@@ -55,8 +58,9 @@ impl SymbolResolver {
             ExpressionKind::FieldAccess { object, field: _ } => {
                 let path = self.get_field_access_path(expr);
                 if let Some(ref p) = path {
-                    if p.starts_with("ctx.accounts.") {
-                        let field_name = &p["ctx.accounts.".len()..];
+                    let prefix = format!("{}.accounts.", self.context_var_name);
+                    if p.starts_with(&prefix) {
+                        let field_name = &p[prefix.len()..];
                         if let Some(sym) = self.get_symbol_by_name(field_name) {
                             return Some(sym);
                         }
@@ -121,6 +125,15 @@ impl SymbolResolver {
     }
 
     fn initialize_parameter_mappings(&mut self, context: &InstructionAnalysisContext) {
+        // Register version 1 mappings for all symbols in name_to_symbol
+        for (_name, &sym_id) in &context.symbol_table {
+            let ssa_id = SSAVersionId {
+                symbol_id: sym_id,
+                version: 1,
+            };
+            self.version_to_symbol.insert(ssa_id, sym_id);
+        }
+
         // Extract SymbolIds from accounts structurally defined in guard facts
         for (fact, _) in &context.guard_facts {
             match fact {
@@ -131,9 +144,14 @@ impl SymbolResolver {
                 | GuardFact::Initialized { account, .. }
                 | GuardFact::Resized { account, .. }
                 | GuardFact::Deallocated { account, .. } => {
-                    if let Some(_sym_id) = account.symbol_id() {
-                        // Seed name registry mapping for testing and resolution
-                        // We will map these keys by default
+                    if let Some(sym_id) = account.symbol_id() {
+                        let ssa_id = SSAVersionId {
+                            symbol_id: sym_id,
+                            version: 1,
+                        };
+                        if !self.version_to_symbol.contains_key(&ssa_id) {
+                            self.version_to_symbol.insert(ssa_id, sym_id);
+                        }
                     }
                 }
                 _ => {}

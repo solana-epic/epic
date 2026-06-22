@@ -195,7 +195,42 @@ export type MachineReadableUpgradeSimulation = {
   bankrunHook: string;
 };
 
-export { analyzeAnchorProject } from "./project.js";
+export type ProgramIrAccount = {
+  name: string;
+  isMut: boolean;
+  isSigner: boolean;
+  docs?: string[];
+  relations?: string[];
+};
+
+export type ProgramIrInstruction = {
+  name: string;
+  discriminator?: number[];
+  accounts: ProgramIrAccount[];
+  args: Array<{ name: string; type: string }>;
+  docs?: string[];
+};
+
+export type ProgramIrType = {
+  name: string;
+  type: {
+    kind: "struct" | "enum";
+    fields?: Array<{ name: string; type: string }>;
+    variants?: Array<{ name: string; fields?: Array<{ name: string; type: string }> }>;
+  };
+};
+
+export type ProgramIr = {
+  name: string;
+  version: string;
+  idlVersion?: string;
+  programId?: string;
+  accounts: AccountStruct[];
+  instructions: ProgramIrInstruction[];
+  types: ProgramIrType[];
+};
+
+export { analyzeAnchorProject, normalizeIdlToProgramIr } from "./project.js";
 export { compareAccountSets, compareAnchorProjects, toMachineReadableReport } from "./diff.js";
 export { AnalysisError } from "./rust.js";
 export { simulateUpgrade, toMachineReadableSimulation } from "./simulation.js";

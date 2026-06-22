@@ -10,9 +10,21 @@ fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
         eprintln!("Usage:");
+        eprintln!("  epic-parser-v2 audit <path>                (Audit Solana program/workspace)");
         eprintln!("  epic-parser-v2 <path>                      (Analyze path)");
         eprintln!("  epic-parser-v2 <old_path> <new_path>       (Diff and analyze impact)");
         std::process::exit(1);
+    }
+
+    if args[1] == "audit" {
+        if args.len() < 3 {
+            eprintln!("Usage: epic-parser-v2 audit <path>");
+            std::process::exit(1);
+        }
+        let root = &args[2];
+        let diagnostics = parser_v2::audit::run_audit(root)?;
+        println!("{}", serde_json::to_string_pretty(&diagnostics)?);
+        return Ok(());
     }
 
     if args.len() >= 3 {

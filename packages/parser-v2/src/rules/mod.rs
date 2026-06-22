@@ -1,4 +1,5 @@
 use crate::cfg::guards::{FactConfidence, InstructionAnalysisContext, SymbolId};
+use crate::Workspace;
 use serde::{Deserialize, Serialize};
 
 pub mod dominance;
@@ -39,18 +40,57 @@ pub struct RuleDiagnostic {
     pub target_symbol: SymbolId,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProgramMetadata {
+    pub name: String,
+    pub address: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdlMetadata {
+    pub version: String,
+    pub name: String,
+    pub raw_json: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleMetadata {
+    pub id: String,
+    pub name: String,
+    pub severity: RuleSeverity,
+    pub description: String,
+}
+
+/// The canonical analysis context containing all graphs and metadata passed to security rules.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnalysisContext {
+    pub program_metadata: ProgramMetadata,
+    pub idl_metadata: Option<IdlMetadata>,
+    pub ast_graph: Workspace,
+    pub instruction_context: InstructionAnalysisContext,
+    pub rule_registry: Vec<RuleMetadata>,
+}
+
+impl AnalysisContext {
+    pub fn resolver(&self) -> SymbolResolver {
+        SymbolResolver::new(&self.instruction_context)
+    }
+
+    pub fn dominance(&self) -> DominanceChecker {
+        DominanceChecker::new(&self.instruction_context.cfg)
+    }
+}
+
 /// Interface for all EPIC security rules.
 pub trait Rule: Send + Sync {
     /// Return the static canonical rule identifier (e.g., "EPIC-SEC-001").
     fn id(&self) -> &'static str;
     /// Return the human-readable description of the rule.
     fn name(&self) -> &'static str;
-    /// Run the rule check against the instruction context.
+    /// Run the rule check against the unified AnalysisContext.
     fn check(
         &self,
-        context: &InstructionAnalysisContext,
-        resolver: &SymbolResolver,
-        dom_checker: &DominanceChecker,
+        context: &AnalysisContext,
     ) -> Vec<RuleDiagnostic>;
 }
 
@@ -68,13 +108,10 @@ impl RuleEngine {
         self.rules.push(rule);
     }
 
-    pub fn run_all(&self, context: &InstructionAnalysisContext) -> Vec<RuleDiagnostic> {
-        let resolver = SymbolResolver::new(context);
-        let dom_checker = DominanceChecker::new(&context.cfg);
-
+    pub fn run_all(&self, context: &AnalysisContext) -> Vec<RuleDiagnostic> {
         let mut diagnostics = Vec::new();
         for rule in &self.rules {
-            diagnostics.extend(rule.check(context, &resolver, &dom_checker));
+            diagnostics.extend(rule.check(context));
         }
         diagnostics
     }

@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import picomatch from "picomatch";
-import type { AccountStruct, AnalyzeResult, AccountField } from "./index.js";
+import type { AccountStruct, AnalyzeResult, AccountField, ProgramIr, ProgramIrInstruction, ProgramIrAccount, ProgramIrType } from "./index.js";
 import { parseAccountStructs, parseAllRawStructs } from "./rust.js";
 
 const RUST_EXTENSION = ".rs";
@@ -71,10 +71,7 @@ export async function analyzeAnchorProject(
   };
 }
 
-export async function analyzeAnchorIdl(idlPath: string): Promise<AnalyzeResult> {
-  const idlContent = await readFile(idlPath, "utf8");
-  const idl = JSON.parse(idlContent);
-
+export function extractAccountsFromIdl(idl: any, idlPath: string): AccountStruct[] {
   const accounts: AccountStruct[] = [];
   const typesRegistry = new Map<string, any>();
 
@@ -85,7 +82,7 @@ export async function analyzeAnchorIdl(idlPath: string): Promise<AnalyzeResult> 
   }
 
   const idlAccounts = idl.accounts || [];
-  const namespace = idl.name || path.basename(idlPath, ".json");
+  const namespace = idl.metadata?.name || idl.name || path.basename(idlPath, ".json");
 
   for (const idlAccount of idlAccounts) {
     let idlFields: any[] = [];
@@ -136,9 +133,121 @@ export async function analyzeAnchorIdl(idlPath: string): Promise<AnalyzeResult> 
     });
   }
 
+  return accounts;
+}
+
+export async function analyzeAnchorIdl(idlPath: string): Promise<AnalyzeResult> {
+  const idlContent = await readFile(idlPath, "utf8");
+  const idl = JSON.parse(idlContent);
+  const accounts = extractAccountsFromIdl(idl, idlPath);
   return {
     projectPath: idlPath,
     accounts: accounts.sort((left, right) => left.name.localeCompare(right.name))
+  };
+}
+
+function normalizeTypeToString(type: any): string {
+  if (typeof type === "string") {
+    if (type === "publicKey" || type === "pubkey" || type === "Pubkey") {
+      return "publicKey";
+    }
+    return type;
+  }
+  if (type && typeof type === "object") {
+    if ("defined" in type) {
+      if (typeof type.defined === "string") {
+        return type.defined;
+      }
+      if (type.defined && typeof type.defined === "object" && "name" in type.defined) {
+        return type.defined.name;
+      }
+      return JSON.stringify(type.defined);
+    }
+    if ("option" in type) {
+      return `Option<${normalizeTypeToString(type.option)}>`;
+    }
+    if ("vec" in type) {
+      return `Vec<${normalizeTypeToString(type.vec)}>`;
+    }
+    if ("array" in type && Array.isArray(type.array)) {
+      return `[${normalizeTypeToString(type.array[0])}; ${type.array[1]}]`;
+    }
+  }
+  return JSON.stringify(type);
+}
+
+export function normalizeIdlToProgramIr(idl: any, filePath = ""): ProgramIr {
+  const name = idl.metadata?.name || idl.name || "unknown";
+  const version = idl.metadata?.version || idl.version || "0.1.0";
+  const idlVersion = idl.metadata?.spec || idl.spec || undefined;
+  const programId = idl.metadata?.address || idl.address || undefined;
+
+  const accounts = extractAccountsFromIdl(idl, filePath);
+
+  const instructions: ProgramIrInstruction[] = (idl.instructions || []).map((inst: any) => {
+    const instAccounts: ProgramIrAccount[] = (inst.accounts || []).map((acc: any) => {
+      return {
+        name: acc.name,
+        isMut: acc.writable !== undefined ? acc.writable : (acc.isMut !== undefined ? acc.isMut : false),
+        isSigner: acc.signer !== undefined ? acc.signer : (acc.isSigner !== undefined ? acc.isSigner : false),
+        ...(acc.docs ? { docs: acc.docs } : {}),
+        ...(acc.relations ? { relations: acc.relations } : {})
+      };
+    });
+
+    const args = (inst.args || []).map((arg: any) => ({
+      name: arg.name,
+      type: normalizeTypeToString(arg.type)
+    }));
+
+    return {
+      name: inst.name,
+      ...(inst.discriminator ? { discriminator: inst.discriminator } : {}),
+      accounts: instAccounts,
+      args,
+      ...(inst.docs ? { docs: inst.docs } : {})
+    };
+  });
+
+  const types: ProgramIrType[] = (idl.types || []).map((t: any) => {
+    const kind = t.type?.kind;
+    const fields = t.type?.fields?.map((f: any) => ({
+      name: f.name,
+      type: normalizeTypeToString(f.type)
+    }));
+    const variants = t.type?.variants?.map((v: any) => {
+      const vFields = v.fields?.map((vf: any) => {
+        if (typeof vf === "string" || !("name" in vf)) {
+          return { name: "", type: normalizeTypeToString(vf) };
+        }
+        return {
+          name: vf.name,
+          type: normalizeTypeToString(vf.type)
+        };
+      });
+      return {
+        name: v.name,
+        ...(vFields ? { fields: vFields } : {})
+      };
+    });
+    return {
+      name: t.name,
+      type: {
+        kind,
+        ...(fields ? { fields } : {}),
+        ...(variants ? { variants } : {})
+      }
+    };
+  });
+
+  return {
+    name,
+    version,
+    idlVersion,
+    programId,
+    accounts,
+    instructions,
+    types
   };
 }
 

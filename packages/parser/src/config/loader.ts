@@ -14,7 +14,8 @@ export function getDefaultConfig(): ResolvedEpicConfig {
     failOnSeverity: "CRITICAL",
     excludePaths: [],
     enforcePadding: false,
-    programs: new Map()
+    programs: new Map(),
+    ignore: []
   };
 }
 
@@ -104,7 +105,8 @@ export function loadEpicConfig(configPath?: string): ResolvedEpicConfig {
       rpcUrl: parsed.workspace?.rpc_url,
       excludePaths: parsed.workspace?.exclude_paths || [],
       enforcePadding: parsed.workspace?.enforce_padding || false,
-      programs: resolvedPrograms
+      programs: resolvedPrograms,
+      ignore: parsed.ignore || []
     };
   } catch (error) {
     if (error instanceof Error) {

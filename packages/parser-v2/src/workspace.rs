@@ -174,7 +174,8 @@ pub fn parse_type(ty: &syn::Type) -> TypeRef {
                             return TypeRef::Vec(Box::new(parse_type(inner_ty)));
                         }
                     }
-                    TypeRef::Custom(ident)
+                    let full_ty = quote::quote!(#ty).to_string().replace(" ", "");
+                    TypeRef::Custom(full_ty)
                 }
                 "Option" => {
                     if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
@@ -182,9 +183,22 @@ pub fn parse_type(ty: &syn::Type) -> TypeRef {
                             return TypeRef::Option(Box::new(parse_type(inner_ty)));
                         }
                     }
-                    TypeRef::Custom(ident)
+                    let full_ty = quote::quote!(#ty).to_string().replace(" ", "");
+                    TypeRef::Custom(full_ty)
                 }
-                _ => TypeRef::Custom(ident),
+                "Box" => {
+                    if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                        if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
+                            return parse_type(inner_ty);
+                        }
+                    }
+                    let full_ty = quote::quote!(#ty).to_string().replace(" ", "");
+                    TypeRef::Custom(full_ty)
+                }
+                _ => {
+                    let full_ty = quote::quote!(#ty).to_string().replace(" ", "");
+                    TypeRef::Custom(full_ty)
+                }
             }
         }
         syn::Type::Array(type_array) => {

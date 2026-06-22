@@ -29,6 +29,7 @@ export interface RawWorkspaceConfig {
 export interface RawEpicConfig {
   workspace?: RawWorkspaceConfig;
   programs?: Record<string, RawProgramConfig>;
+  ignore?: string[];
 }
 
 export interface ResolvedOverride {
@@ -56,4 +57,5 @@ export interface ResolvedEpicConfig {
   excludePaths: string[];
   enforcePadding: boolean;
   programs: Map<string, ResolvedProgram>;
+  ignore: string[];
 }

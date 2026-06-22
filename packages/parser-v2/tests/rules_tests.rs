@@ -108,6 +108,8 @@ fn test_owner_validation_safe_vs_unsafe() {
                 column_number: 1,
                 framework: "Anchor".to_string(),
                 confidence_level: FactConfidence::Declared,
+                node_id: None,
+                statement_index: None,
             },
         ),
         (
@@ -122,41 +124,41 @@ fn test_owner_validation_safe_vs_unsafe() {
                 column_number: 1,
                 framework: "Anchor".to_string(),
                 confidence_level: FactConfidence::Declared,
+                node_id: None,
+                statement_index: None,
             },
         ),
     ];
+
+    let mut symbol_table = HashMap::new();
+    symbol_table.insert("vault".to_string(), vault_symbol);
+    symbol_table.insert("unchecked".to_string(), unchecked_symbol);
 
     let context = InstructionAnalysisContext {
         name: "test_instruction".to_string(),
         guard_facts,
         cfg,
+        symbol_table,
+        file_path: "lib.rs".to_string(),
+        context_var_name: "ctx".to_string(),
     };
 
     // 4. Register parameters inside resolver
     let mut engine = RuleEngine::new();
     engine.register_rule(Box::new(OwnerValidationRule));
 
-    let mut resolver = SymbolResolver::new(&context);
-    resolver.register_name("vault", vault_symbol);
-    resolver.register_name("unchecked", unchecked_symbol);
-    resolver.register_alias(
-        SSAVersionId {
-            symbol_id: vault_symbol,
-            version: 1,
+    let analysis_context = parser_v2::rules::AnalysisContext {
+        program_metadata: parser_v2::rules::ProgramMetadata {
+            name: "test_program".to_string(),
+            address: None,
         },
-        vault_symbol,
-    );
-    resolver.register_alias(
-        SSAVersionId {
-            symbol_id: unchecked_symbol,
-            version: 1,
-        },
-        unchecked_symbol,
-    );
+        idl_metadata: None,
+        ast_graph: parser_v2::Workspace::new(),
+        instruction_context: context,
+        rule_registry: Vec::new(),
+    };
 
-    let dom_checker = DominanceChecker::new(&context.cfg);
-    let rule = OwnerValidationRule;
-    let diagnostics = rule.check(&context, &resolver, &dom_checker);
+    let diagnostics = engine.run_all(&analysis_context);
 
     println!("DIAGNOSTICS: {:#?}", diagnostics);
 
@@ -291,45 +293,40 @@ fn test_owner_validation_wdg_transitive() {
             column_number: 1,
             framework: "Anchor".to_string(),
             confidence_level: FactConfidence::Declared,
+            node_id: None,
+            statement_index: None,
         },
     )];
+
+    let mut symbol_table = HashMap::new();
+    symbol_table.insert("unchecked".to_string(), unchecked_symbol);
+    symbol_table.insert("data".to_string(), data_symbol);
+    symbol_table.insert("state".to_string(), state_symbol);
 
     let context = InstructionAnalysisContext {
         name: "test_instruction".to_string(),
         guard_facts,
         cfg,
+        symbol_table,
+        file_path: "lib.rs".to_string(),
+        context_var_name: "ctx".to_string(),
     };
 
-    let mut resolver = SymbolResolver::new(&context);
-    resolver.register_name("unchecked", unchecked_symbol);
-    resolver.register_name("data", data_symbol);
-    resolver.register_name("state", state_symbol);
+    let mut engine = RuleEngine::new();
+    engine.register_rule(Box::new(OwnerValidationRule));
 
-    resolver.register_alias(
-        SSAVersionId {
-            symbol_id: unchecked_symbol,
-            version: 1,
+    let analysis_context = parser_v2::rules::AnalysisContext {
+        program_metadata: parser_v2::rules::ProgramMetadata {
+            name: "test_program".to_string(),
+            address: None,
         },
-        unchecked_symbol,
-    );
-    resolver.register_alias(
-        SSAVersionId {
-            symbol_id: data_symbol,
-            version: 1,
-        },
-        data_symbol,
-    );
-    resolver.register_alias(
-        SSAVersionId {
-            symbol_id: state_symbol,
-            version: 1,
-        },
-        state_symbol,
-    );
+        idl_metadata: None,
+        ast_graph: parser_v2::Workspace::new(),
+        instruction_context: context,
+        rule_registry: Vec::new(),
+    };
 
-    let dom_checker = DominanceChecker::new(&context.cfg);
-    let rule = OwnerValidationRule;
-    let diagnostics = rule.check(&context, &resolver, &dom_checker);
+    let diagnostics = engine.run_all(&analysis_context);
 
     println!("WDG DIAGNOSTICS: {:#?}", diagnostics);
 
