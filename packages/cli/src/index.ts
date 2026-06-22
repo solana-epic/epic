@@ -95,7 +95,7 @@ program
 
       console.log(formatHumanReport(report));
 
-      const severityOrder = ["SAFE", "MINOR", "MAJOR", "CRITICAL"];
+      const severityOrder = ["SAFE", "MINOR", "WARNING", "MAJOR", "CRITICAL"];
       const thresholdIndex = severityOrder.indexOf(epicConfig.failOnSeverity);
       const reportSeverityIndex = severityOrder.indexOf(report.severity);
 

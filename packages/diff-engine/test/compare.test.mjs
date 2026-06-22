@@ -7,13 +7,13 @@ import { compareAnchorPrograms, createUpgradeIntelligence, formatHumanReport } f
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const fixture = (name) => path.join(repoRoot, "fixtures", name);
 
-test("detects field additions as major upgrade risks", async () => {
+test("detects field additions as warning upgrade risks", async () => {
   const report = await compareAnchorPrograms(fixture("old-position"), fixture("new-added-field"));
 
-  assert.equal(report.severity, "MAJOR");
+  assert.equal(report.severity, "WARNING");
   assert.equal(report.findings.length, 1);
   assert.deepEqual(report.findings[0], {
-    severity: "MAJOR",
+    severity: "WARNING",
     account: "Position",
     kind: "FIELD_ADDED",
     field: {
@@ -29,12 +29,19 @@ test("detects field removals as critical upgrade risks", async () => {
   const report = await compareAnchorPrograms(fixture("new-added-field"), fixture("new-removed-field"));
 
   assert.equal(report.severity, "CRITICAL");
-  assert.equal(report.findings.length, 1);
-  assert.equal(report.findings[0].kind, "FIELD_REMOVED");
-  assert.deepEqual(report.findings[0].field, {
+  assert.equal(report.findings.length, 2);
+
+  const removedFinding = report.findings.find(f => f.kind === "FIELD_REMOVED");
+  assert.ok(removedFinding);
+  assert.deepEqual(removedFinding.field, {
     name: "amount",
     oldType: "u64"
   });
+
+  const sizeFinding = report.findings.find(f => f.kind === "SIZE_REDUCED");
+  assert.ok(sizeFinding);
+  assert.equal(sizeFinding.oldSize, 48);
+  assert.equal(sizeFinding.newSize, 40);
 });
 
 test("detects field reordering as critical upgrade risks", async () => {

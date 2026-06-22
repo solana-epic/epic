@@ -54,6 +54,21 @@ function formatFinding(finding: DiffFinding): string {
     lines.push(`${finding.field.oldType} -> ${finding.field.newType}`);
   }
 
+  if (finding.kind === "SIZE_REDUCED") {
+    lines.push(`Account Size Shrink:`);
+    lines.push(`${finding.oldSize} -> ${finding.newSize} bytes`);
+  }
+
+  if (finding.kind === "DISCRIMINATOR_CHANGED" && finding.field?.oldType) {
+    lines.push(`Instruction '${finding.field.name}' modified:`);
+    lines.push(`Old Discriminator: ${finding.field.oldType}`);
+    if (finding.field.newType) {
+      lines.push(`New Discriminator: ${finding.field.newType}`);
+    } else {
+      lines.push(`New Discriminator: (deleted)`);
+    }
+  }
+
   lines.push("Risk Category:");
   lines.push(intelligence.riskCategory);
   lines.push("Affected Surface:");
@@ -78,5 +93,9 @@ function findingTitle(finding: DiffFinding): string {
       return "Field Reordered";
     case "TYPE_CHANGED":
       return "Type Changed:";
+    case "SIZE_REDUCED":
+      return "Account Size Reduced:";
+    case "DISCRIMINATOR_CHANGED":
+      return "Program Discriminator Mismatch:";
   }
 }

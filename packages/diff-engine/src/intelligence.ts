@@ -6,7 +6,8 @@ export type RiskCategory =
   | "Account Shrink"
   | "Field Reorder"
   | "Enum Expansion"
-  | "Dynamic Type Introduction";
+  | "Dynamic Type Introduction"
+  | "Discriminator Mismatch";
 
 export type AffectedSurface = "Existing Accounts" | "Client SDKs" | "Indexers" | "IDLs";
 
@@ -58,6 +59,10 @@ function riskCategoryForFinding(finding: DiffFinding): RiskCategory {
       return "Field Reorder";
     case "TYPE_CHANGED":
       return isDynamicType(finding.field?.newType) ? "Dynamic Type Introduction" : "Serialization Break";
+    case "SIZE_REDUCED":
+      return "Account Shrink";
+    case "DISCRIMINATOR_CHANGED":
+      return "Discriminator Mismatch";
   }
 }
 
@@ -68,6 +73,7 @@ function affectedSurfaceForCategory(category: RiskCategory): AffectedSurface[] {
     case "Account Shrink":
     case "Serialization Break":
     case "Field Reorder":
+    case "Discriminator Mismatch":
       return ["Existing Accounts", "Client SDKs", "Indexers", "IDLs"];
     case "Enum Expansion":
       return ["Client SDKs", "Indexers", "IDLs"];
@@ -90,6 +96,8 @@ function recommendationForCategory(category: RiskCategory): string {
       return "Regenerate IDLs and client SDKs, then verify indexers handle the new enum variant.";
     case "Dynamic Type Introduction":
       return "Avoid introducing dynamic persisted fields without bounded sizing and an explicit migration plan.";
+    case "Discriminator Mismatch":
+      return "Do not rename persisted account structures or program entrypoints. Revert the rename or plan a client deprecation path.";
   }
 }
 
@@ -103,6 +111,13 @@ function changeDescription(finding: DiffFinding): string {
       return "Persisted field order changed";
     case "TYPE_CHANGED":
       return `${finding.field?.oldType ?? "unknown"} -> ${finding.field?.newType ?? "unknown"}`;
+    case "SIZE_REDUCED":
+      return `Account size reduced: ${finding.oldSize} -> ${finding.newSize} bytes`;
+    case "DISCRIMINATOR_CHANGED":
+      if (finding.field && finding.field.oldType) {
+        return `Instruction '${finding.field.name}' was renamed or modified. Old: ${finding.field.oldType}, New: ${finding.field.newType || "deleted"}`;
+      }
+      return `Account discriminator changed`;
   }
 }
 

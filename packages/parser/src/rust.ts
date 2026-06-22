@@ -97,6 +97,17 @@ export function parseAccountStructs(
       break;
     }
 
+    const nextStructIndex = cleanSource.indexOf("struct ", accountAttributeIndex);
+    if (nextStructIndex === -1) {
+      searchIndex = accountAttributeIndex + "#[account".length;
+      continue;
+    }
+    const textBetween = cleanSource.slice(accountAttributeIndex, nextStructIndex);
+    if (textBetween.includes("{") || textBetween.includes("}") || textBetween.includes(";")) {
+      searchIndex = accountAttributeIndex + "#[account".length;
+      continue;
+    }
+
     const structBlock = findNextStructBlock(cleanSource, accountAttributeIndex);
 
     if (!structBlock) {
@@ -127,7 +138,8 @@ export function parseAccountStructs(
       hasDynamicSize: layoutWarnings.length > 0,
       layoutWarnings,
       fields,
-      filePath
+      filePath,
+      discriminator: computeAccountDiscriminator(structBlock.name)
     });
 
     searchIndex = structBlock.endIndex + 1;
@@ -340,6 +352,11 @@ function abiFingerprint(accountName: string, fields: AccountField[]): string {
   return createHash("sha256").update(input).digest("hex");
 }
 
+function computeAccountDiscriminator(structName: string): string {
+  const hash = createHash("sha256").update(`account:${structName}`).digest();
+  return "0x" + hash.subarray(0, 8).toString("hex");
+}
+
 function stripRustComments(source: string): string {
   let output = "";
   let index = 0;
@@ -375,4 +392,33 @@ function stripRustComments(source: string): string {
   }
 
   return output;
+}
+
+export type ProgramInstruction = {
+  name: string;
+  discriminator: string;
+  filePath: string;
+};
+
+export function parseInstructions(source: string, filePath: string): ProgramInstruction[] {
+  const cleanSource = stripRustComments(source);
+  const instructions: ProgramInstruction[] = [];
+  const fnRegex = /\bpub\s+fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*(?:mut\s+)?(?:[A-Za-z_][A-Za-z0-9_]*)\s*:\s*Context\s*</g;
+
+  let match;
+  while ((match = fnRegex.exec(cleanSource)) !== null) {
+    const fnName = match[1];
+    instructions.push({
+      name: fnName,
+      discriminator: computeInstructionDiscriminator(fnName),
+      filePath
+    });
+  }
+
+  return instructions;
+}
+
+function computeInstructionDiscriminator(fnName: string): string {
+  const hash = createHash("sha256").update(`global:${fnName}`).digest();
+  return "0x" + hash.subarray(0, 8).toString("hex");
 }

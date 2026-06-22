@@ -4,9 +4,15 @@ import { classifyFindings, highestSeverity } from "./classify.js";
 import { resolveFindingsWithConfig, findProgramName } from "./resolve.js";
 import path from "node:path";
 
-export type Severity = "SAFE" | "MINOR" | "MAJOR" | "CRITICAL";
+export type Severity = "SAFE" | "MINOR" | "MAJOR" | "CRITICAL" | "WARNING";
 
-export type DiffFindingKind = "FIELD_ADDED" | "FIELD_REMOVED" | "FIELD_REORDERED" | "TYPE_CHANGED";
+export type DiffFindingKind =
+  | "FIELD_ADDED"
+  | "FIELD_REMOVED"
+  | "FIELD_REORDERED"
+  | "TYPE_CHANGED"
+  | "SIZE_REDUCED"
+  | "DISCRIMINATOR_CHANGED";
 
 export type FieldChange = {
   name: string;
@@ -64,6 +70,42 @@ export function compareAccountLayouts(
     findings.push(...compareAccount(oldAccount, newAccount));
   }
 
+  // Compare instruction entrypoints for renames / discriminator shifts
+  if (oldProgram.instructions && newProgram.instructions) {
+    const oldInsts = new Map(oldProgram.instructions.map((i) => [i.name, i]));
+    const newInsts = new Map(newProgram.instructions.map((i) => [i.name, i]));
+
+    for (const [name, oldInst] of oldInsts.entries()) {
+      const newInst = newInsts.get(name);
+      if (!newInst) {
+        findings.push({
+          severity: "CRITICAL",
+          account: "global",
+          kind: "DISCRIMINATOR_CHANGED",
+          oldSize: 0,
+          newSize: 0,
+          field: {
+            name,
+            oldType: oldInst.discriminator
+          }
+        });
+      } else if (oldInst.discriminator !== newInst.discriminator) {
+        findings.push({
+          severity: "CRITICAL",
+          account: "global",
+          kind: "DISCRIMINATOR_CHANGED",
+          oldSize: 0,
+          newSize: 0,
+          field: {
+            name,
+            oldType: oldInst.discriminator,
+            newType: newInst.discriminator
+          }
+        });
+      }
+    }
+  }
+
   let classifiedFindings = classifyFindings(findings);
 
   if (cfg) {
@@ -83,6 +125,28 @@ function compareAccount(oldAccount: AccountStruct, newAccount: AccountStruct): D
   const findings: DiffFinding[] = [];
   const oldFields = mapFieldsByName(oldAccount.fields);
   const newFields = mapFieldsByName(newAccount.fields);
+
+  // Check discriminator change
+  if (oldAccount.discriminator && newAccount.discriminator && oldAccount.discriminator !== newAccount.discriminator) {
+    findings.push({
+      severity: "CRITICAL",
+      account: oldAccount.name,
+      kind: "DISCRIMINATOR_CHANGED",
+      oldSize: oldAccount.byteSize,
+      newSize: newAccount.byteSize
+    });
+  }
+
+  // Check size reduction
+  if (newAccount.byteSize < oldAccount.byteSize) {
+    findings.push({
+      severity: "CRITICAL",
+      account: oldAccount.name,
+      kind: "SIZE_REDUCED",
+      oldSize: oldAccount.byteSize,
+      newSize: newAccount.byteSize
+    });
+  }
 
   for (const oldField of oldAccount.fields) {
     const newField = newFields.get(oldField.name);

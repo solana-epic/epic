@@ -26,11 +26,18 @@ export type AccountStruct = {
   layoutWarnings: LayoutWarning[];
   fields: AccountField[];
   filePath: string;
+  discriminator?: string;
+};
+export type ProgramInstruction = {
+  name: string;
+  discriminator: string;
+  filePath: string;
 };
 
 export type AnalyzeResult = {
   projectPath: string;
   accounts: AccountStruct[];
+  instructions?: ProgramInstruction[];
 };
 
 export type RiskLevel = "None" | "Low" | "Medium" | "High" | "Critical";
@@ -232,7 +239,7 @@ export type ProgramIr = {
 
 export { analyzeAnchorProject, normalizeIdlToProgramIr } from "./project.js";
 export { compareAccountSets, compareAnchorProjects, toMachineReadableReport } from "./diff.js";
-export { AnalysisError } from "./rust.js";
+export { AnalysisError, parseInstructions } from "./rust.js";
 export { simulateUpgrade, toMachineReadableSimulation } from "./simulation.js";
 export * as config from "./config/index.js";
 

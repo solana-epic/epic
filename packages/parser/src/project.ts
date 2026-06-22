@@ -3,7 +3,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import picomatch from "picomatch";
 import type { AccountStruct, AnalyzeResult, AccountField, ProgramIr, ProgramIrInstruction, ProgramIrAccount, ProgramIrType } from "./index.js";
-import { parseAccountStructs, parseAllRawStructs } from "./rust.js";
+import { parseAccountStructs, parseAllRawStructs, parseInstructions } from "./rust.js";
 
 const RUST_EXTENSION = ".rs";
 
@@ -43,6 +43,7 @@ export async function analyzeAnchorProject(
   }
 
   const accounts: AccountStruct[] = [];
+  const instructions: any[] = [];
 
   for (const filePath of rustFiles) {
     const source = await readFile(filePath, "utf8");
@@ -57,6 +58,9 @@ export async function analyzeAnchorProject(
     });
 
     accounts.push(...parsedAccounts);
+
+    const parsedInstructions = parseInstructions(source, filePath);
+    instructions.push(...parsedInstructions);
   }
 
   return {
@@ -67,7 +71,8 @@ export async function analyzeAnchorProject(
       }
 
       return left.namespace.localeCompare(right.namespace);
-    })
+    }),
+    instructions
   };
 }
 
@@ -129,7 +134,8 @@ export function extractAccountsFromIdl(idl: any, idlPath: string): AccountStruct
       hasDynamicSize: layoutWarnings.length > 0,
       layoutWarnings,
       fields,
-      filePath: idlPath
+      filePath: idlPath,
+      discriminator: computeAccountDiscriminator(idlAccount.name)
     });
   }
 
@@ -140,9 +146,20 @@ export async function analyzeAnchorIdl(idlPath: string): Promise<AnalyzeResult> 
   const idlContent = await readFile(idlPath, "utf8");
   const idl = JSON.parse(idlContent);
   const accounts = extractAccountsFromIdl(idl, idlPath);
+  const instructions: any[] = (idl.instructions || []).map((inst: any) => {
+    const name = inst.name;
+    const hash = createHash("sha256").update(`global:${name}`).digest();
+    const discriminator = "0x" + hash.subarray(0, 8).toString("hex");
+    return {
+      name,
+      discriminator,
+      filePath: idlPath
+    };
+  });
   return {
     projectPath: idlPath,
-    accounts: accounts.sort((left, right) => left.name.localeCompare(right.name))
+    accounts: accounts.sort((left, right) => left.name.localeCompare(right.name)),
+    instructions
   };
 }
 
@@ -429,6 +446,11 @@ function idlAbiFingerprint(accountName: string, fields: AccountField[]): string 
   });
 
   return createHash("sha256").update(input).digest("hex");
+}
+
+function computeAccountDiscriminator(structName: string): string {
+  const hash = createHash("sha256").update(`account:${structName}`).digest();
+  return "0x" + hash.subarray(0, 8).toString("hex");
 }
 
 async function findRustFiles(rootPath: string): Promise<string[]> {

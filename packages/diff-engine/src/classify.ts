@@ -22,10 +22,12 @@ export function highestSeverity(severities: Severity[]): Severity {
 function severityForFinding(finding: DiffFinding): Severity {
   switch (finding.kind) {
     case "FIELD_ADDED":
-      return finding.severity === "CRITICAL" ? "CRITICAL" : "MAJOR";
+      return finding.severity === "CRITICAL" ? "CRITICAL" : "WARNING";
     case "FIELD_REMOVED":
     case "FIELD_REORDERED":
     case "TYPE_CHANGED":
+    case "SIZE_REDUCED":
+    case "DISCRIMINATOR_CHANGED":
       return "CRITICAL";
   }
 }
