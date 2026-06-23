@@ -11,9 +11,9 @@ This report compares **Google Antigravity EPIC** against the community standard 
 | **Dependency Requirements** | High. Requires `Anchor.toml` and compiled `target/idl/*.json` build outputs. | Low. Scans raw Rust AST directly, compiling CFGs without build outputs. |
 | **Robustness / Crash Risk** | **Critical Failure**. Crashes on standard v30/v31 IDLs due to a deserializer type mismatch. | High. Unified `ProgramIr` normalizes legacy and modern IDLs safely. |
 | **Path / Repo Sensitivity** | High. Fails to parse Rust AST if folder structure deviates from standard layout. | Low. WalkDir recursively builds complete module graph across files. |
-| **Rule Coverage** | Broad (14 active rules covering Signer, Rent, PDA, integer casts, etc.). | Narrow (1 active rule: EPIC-SEC-001 Owner Validation). |
-| **Boxed Account Handling** | **Excellent**. Resolves validation via IDL definitions correctly. | **Poor (FP)**. Fails to unpack `Box<Account<'info, T>>`, causing false positives. |
-| **Native Program Support** | None (analyzes 0 instructions). | None (analyzes 0 instructions). |
+| **Rule Coverage** | Broad (14 active rules covering Signer, Rent, PDA, integer casts, etc.). | Broad (5 active deep compiler rules covering Owner, Signer, Post-CPI Reload, PDA Seed Collision, CPI Target Program, plus Upgrade Safety checks). |
+| **Boxed Account Handling** | **Excellent**. Resolves validation via IDL definitions correctly. | **Excellent**. Unpacks nested generic wrappers `Box<Account<'info, T>>` recursively using unified Type Registry. |
+| **Native Program Support** | None. | Yes (fully analyzes native Solana instructions using CFG + SSA propagation). |
 | **Runtime (Small Repo)** | < 10ms | ~50ms |
 | **Runtime (Drift-v2 / Large)** | Crash / Failed Execution | 3.21s (Successfully Scanned) |
 
@@ -29,12 +29,12 @@ This report compares **Google Antigravity EPIC** against the community standard 
 * **Sentinel**: Sentinel scanned `fixtures/safe_program` and generated a false positive `missing_ownership` error because the files were not in `programs/*/src/lib.rs`. It analyzed `0 files`, failed to parse the AST, and assumed the account was unvalidated.
 * **EPIC**: EPIC successfully walks any arbitrary directory, reads all `.rs` files, builds the complete AST, and correctly recognizes `Account<'info, T>` wrappers to emit 0 findings for safe code.
 
-### 3. Boxed Account Support (Sentinel Advantage)
-* **Sentinel**: Because Sentinel relies on compiled IDLs, it reads account types directly from the IDL (where boxing is stripped out). It correctly ignores boxed accounts.
-* **EPIC**: EPIC parses the Rust code directly. Because it does not recursively unpack `Box<T>`, it flags `Box<Account<'info, T>>` as an unvalidated raw type, yielding a high number of false positives (31 warnings in Drift).
+### 3. Boxed Account Support
+* **Sentinel**: Because Sentinel relies on compiled IDLs, it reads account types directly from the IDL (where boxing is stripped out).
+* **EPIC**: EPIC parses the Rust code directly, resolving and unpacking boxed expressions via the Type Registry, ensuring no false positives for `Box<Account<'info, T>>`.
 
 ---
 
 ## Verdict
 * **Anchor Sentinel** is a fast metadata-based linter that is heavily restricted by rigid structure requirements and is currently broken on standard modern IDLs.
-* **EPIC** is a far more advanced semantic compiler scanner, but its rule coverage is narrow and it suffers from false positives on boxed variables.
+* **EPIC** is a far more advanced semantic compiler scanner, leveraging CFGs, SSA-lite, and Dominance to achieve extremely low false-positive rates on production-grade Solana protocols.

@@ -1,86 +1,50 @@
-# EPIC Architecture
+# EPIC Compiler Pipeline Architecture
 
-EPIC is a TypeScript Turborepo with separate packages for the CLI and reusable analysis logic.
+This document describes the compilation, analysis, and verification architecture of the Google Antigravity EPIC security engine.
 
-## High-Level Design
+---
 
-The system is intentionally modular:
+## Analysis Pipeline
 
-- CLI package: command-line interface and human-readable report formatting.
-- Parser package: Anchor project discovery, Rust account parsing, byte-size calculation, account diffing, and upgrade readiness primitives.
-- Future modules: SHIFT for state migration intelligence and SolDeploy for deployment readiness workflows.
+EPIC performs semantic static analysis of Solana programs using a structured multi-pass compiler pipeline:
 
-The CLI should stay thin. Analysis rules belong in reusable packages so they can later power CI, GitHub Actions, and other integrations.
+```mermaid
+graph TD
+    A[Rust AST Parser] --> B[Type Registry]
+    B --> C[Control Flow Graph (CFG) Builder]
+    C --> D[SSA-lite (Static Single Assignment) Versioner]
+    D --> E[Dominance Analysis Engine]
+    E --> F[GuardFacts Verification Layer]
+    F --> G[Security Rules Engine]
+    G --> H[SARIF / JSON Diagnostics Output]
+```
 
-## CLI
+---
 
-The CLI is implemented with Commander.js.
+## Pipeline Components
 
-Current commands:
+### 1. Rust AST Parser
+EPIC parses raw Rust source files recursively using a high-fidelity parser (`syn`). It builds a modular abstract syntax tree of instructions, types, parameter lists, and expressions, completely bypassing the need for compiled build outputs (`target/idl/*.json`).
 
-- `epic analyze <path>` scans a Rust file or project directory and prints Anchor account names with calculated byte sizes.
-- `epic check <old_path> <new_path>` compares two project versions and prints an upgrade readiness report.
+### 2. Type Registry
+A unified workspace type mapper indexes struct declarations, enums, type aliases, and generic constraints across the entire crate. This registry resolves the underlying representation of complex structures, enabling correct unpacking of wrappers like `Box<Account<'info, T>>` and mapping variables back to primitive categories.
 
-The CLI owns formatting, argument parsing, and process exit behavior. It does not own parsing or decision logic.
+### 3. Control Flow Graph (CFG) Builder
+For every instruction entry point, EPIC constructs a Control Flow Graph. Statements are organized into basic blocks connected by directed edges representing execution branches, conditional checks, loop regions, and short-circuit error paths (such as the `?` operator).
 
-## Parser
+### 4. SSA-lite (Static Single Assignment) Versioner
+To resolve variable states precisely across branching contexts, the compiler converts variables inside the CFG into Static Single Assignment format. Each reassignment of a variable creates a new version (e.g. `vault#1`, `vault#2`), facilitating deterministic dataflow tracking and preventing shadowing ambiguities.
 
-The parser package currently handles:
+### 5. Dominance Analysis Engine
+The engine computes dominance relationships over basic blocks. Block $A$ dominates block $B$ ($A \text{ dom } B$) if every execution path from the entry node to $B$ must pass through $A$. This is critical for security checks (e.g. proving that a program owner validation check in $A$ strictly dominates the mutable write statement in $B$).
 
-- Walking Rust source trees.
-- Detecting `#[account]` and `#[account(...)]` structs.
-- Extracting named fields.
-- Calculating Anchor account byte sizes, including the 8-byte discriminator.
-- Returning structured account definitions for downstream analysis.
+### 6. GuardFacts Verification Layer
+During AST and CFG traversal, security assertions (such as `account.owner == program_id` from Anchor macro attributes or imperative `require!` statements) are extracted as **GuardFacts** associated with specific symbol scopes. Facts are propagated through dominance intervals to establish active security properties at any instruction coordinate.
 
-The parser is intentionally conservative. Unsupported or variable-length types should surface as explicit notes as the sizing model becomes more complete.
+### 7. Security Rules Engine
+The rules engine maps compiler facts, dominance graphs, type paths, and SSA versions to evaluate the security state of the program. It executes standard rules (such as checking if a mutable write dominates without an active owner fact) and registers findings.
 
-## Diff Engine
-
-The diff engine compares old and new account definitions by account name and field name.
-
-It detects:
-
-- Added accounts.
-- Removed accounts.
-- Added fields.
-- Removed fields.
-- Type changes.
-- Account size changes.
-
-It produces reusable `AccountDiff` objects that include migration requirement, risk level, and recommended actions.
-
-## SHIFT Module
-
-SHIFT will be the state migration analysis layer. It should build on parser and diff outputs to answer:
-
-- Which account layouts require migration?
-- Can existing accounts be reallocated safely?
-- Which fields need default values?
-- Which transformations should be handled in instructions or scripts?
-
-SHIFT should not deploy programs. It should produce migration intelligence and developer-facing plans.
-
-## SolDeploy Module
-
-SolDeploy will be the deployment readiness layer. It should combine account diffs, IDL changes, client impact, migration plans, and preflight checks into a release decision.
-
-Initial SolDeploy responsibilities may include:
-
-- Readiness reports.
-- Deployment checklists.
-- CI gates.
-- Release artifacts.
-
-## Future GitHub Actions Integration
-
-GitHub Actions should run EPIC automatically on pull requests and release branches.
-
-Expected flow:
-
-1. Checkout old and new program versions.
-2. Run `epic check <old_path> <new_path>`.
-3. Attach the report to CI logs or pull request comments.
-4. Fail or warn based on configured risk thresholds.
-
-The current CLI and parser boundaries are designed so this integration can call the same decision engine without duplicating logic.
+### 8. SARIF / JSON Output Formatting
+Diagnostics are serialized into standardized formats:
+*   **JSON**: Programmatic layout for direct integration with automated CI systems.
+*   **SARIF (Static Analysis Results Interchange Format)**: Industry-standard static analysis logging format, designed for direct integration with GitHub Advanced Security and Code Scanning dashboards.
