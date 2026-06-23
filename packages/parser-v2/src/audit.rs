@@ -6,7 +6,7 @@ use crate::cfg::guards::{
 use crate::cfg::ssa::SSAComputer;
 use crate::cfg::CFGBuilder;
 use crate::rules::{
-    AnalysisContext, OwnerValidationRule, ProgramMetadata, RuleDiagnostic, RuleEngine,
+    AnalysisContext, OwnerValidationRule, SignerValidationRule, MissingPostCpiReloadRule, PdaSeedCollisionRule, ArbitraryCpiTargetRule, ProgramMetadata, RuleDiagnostic, RuleEngine,
 };
 use crate::types::{StructDef, TypeDef, TypeRef, TypeRegistry};
 use crate::Workspace;
@@ -252,6 +252,10 @@ pub fn run_audit(root_path: &str) -> anyhow::Result<Vec<RuleDiagnostic>> {
     let mut diagnostics = Vec::new();
     let mut rule_engine = RuleEngine::new();
     rule_engine.register_rule(Box::new(OwnerValidationRule));
+    rule_engine.register_rule(Box::new(SignerValidationRule));
+    rule_engine.register_rule(Box::new(MissingPostCpiReloadRule));
+    rule_engine.register_rule(Box::new(PdaSeedCollisionRule));
+    rule_engine.register_rule(Box::new(ArbitraryCpiTargetRule));
 
     fn collect_let_variables(stmts: &[syn::Stmt], vars: &mut Vec<String>) {
         for stmt in stmts {

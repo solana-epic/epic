@@ -136,6 +136,24 @@ impl CFGBuilder {
                         }
 
                         current_node = merge_node;
+                    } else if let syn::Expr::ForLoop(expr_for) = expr {
+                        current_node = self.compile_statements_inner(&expr_for.body.stmts, current_node)?;
+                    } else if let syn::Expr::While(expr_while) = expr {
+                        current_node = self.compile_statements_inner(&expr_while.body.stmts, current_node)?;
+                    } else if let syn::Expr::Loop(expr_loop) = expr {
+                        current_node = self.compile_statements_inner(&expr_loop.body.stmts, current_node)?;
+                    } else if let syn::Expr::Block(expr_block) = expr {
+                        if has_branching_control_flow(&expr_block.block.stmts) {
+                            current_node = self.compile_statements_inner(&expr_block.block.stmts, current_node)?;
+                        } else {
+                            let converted = convert_stmt(stmt);
+                            self.graph
+                                .nodes
+                                .get_mut(&current_node)
+                                .unwrap()
+                                .statements
+                                .push(converted);
+                        }
                     } else {
                         // P1 Correctness Fix: Model sequential try checkpoints for multiple Try operators
                         let mut tries = Vec::new();
@@ -406,7 +424,10 @@ pub fn convert_expr(expr: &syn::Expr) -> ExpressionNode {
                 syn::BinOp::Ne(_) => "!=".to_string(),
                 syn::BinOp::Lt(_) => "<".to_string(),
                 syn::BinOp::Gt(_) => ">".to_string(),
-                _ => quote::quote!(#expr_binary.op).to_string().replace(" ", ""),
+                _ => {
+                    let bin_op = &expr_binary.op;
+                    quote::quote!(#bin_op).to_string().replace(" ", "")
+                }
             };
             let lhs = convert_expr(&expr_binary.left);
             let rhs = convert_expr(&expr_binary.right);
@@ -441,6 +462,60 @@ pub fn convert_expr(expr: &syn::Expr) -> ExpressionNode {
                 kind: ExpressionKind::Assign {
                     left: Box::new(left),
                     right: Box::new(right),
+                },
+            }
+        }
+        syn::Expr::Unary(expr_unary) => {
+            let op = match &expr_unary.op {
+                syn::UnOp::Not(_) => "!".to_string(),
+                syn::UnOp::Neg(_) => "-".to_string(),
+                syn::UnOp::Deref(_) => "*".to_string(),
+                _ => "unknown".to_string(),
+            };
+            if op == "!" {
+                let expression = convert_expr(&expr_unary.expr);
+                ExpressionNode {
+                    kind: ExpressionKind::BinaryOp {
+                        op: "!".to_string(),
+                        lhs: Box::new(expression),
+                        rhs: Box::new(ExpressionNode {
+                            kind: ExpressionKind::Unresolved,
+                        }),
+                    },
+                }
+            } else if op == "*" {
+                ExpressionNode {
+                    kind: ExpressionKind::Dereference(Box::new(convert_expr(&expr_unary.expr))),
+                }
+            } else {
+                ExpressionNode {
+                    kind: ExpressionKind::Unresolved,
+                }
+            }
+        }
+        syn::Expr::Call(expr_call) => {
+            let func = &expr_call.func;
+            let func_str = quote::quote!(#func).to_string().replace(" ", "");
+            let arguments = expr_call.args.iter().map(convert_expr).collect();
+            ExpressionNode {
+                kind: ExpressionKind::MethodCall {
+                    object: Box::new(ExpressionNode {
+                        kind: ExpressionKind::Unresolved,
+                    }),
+                    method: func_str,
+                    arguments,
+                },
+            }
+        }
+        syn::Expr::Array(expr_array) => {
+            let arguments = expr_array.elems.iter().map(convert_expr).collect();
+            ExpressionNode {
+                kind: ExpressionKind::MethodCall {
+                    object: Box::new(ExpressionNode {
+                        kind: ExpressionKind::Unresolved,
+                    }),
+                    method: "array".to_string(),
+                    arguments,
                 },
             }
         }
@@ -498,7 +573,8 @@ pub fn convert_stmt(stmt: &syn::Stmt) -> StatementNode {
                 .unwrap()
                 .ident
                 .to_string();
-            let raw_args = quote::quote!(#stmt_macro.mac.tokens).to_string();
+            let tokens = &stmt_macro.mac.tokens;
+            let raw_args = quote::quote!(#tokens).to_string();
             StatementKind::MacroCall { name, raw_args }
         }
         _ => StatementKind::Expr(ExpressionNode {
@@ -506,4 +582,70 @@ pub fn convert_stmt(stmt: &syn::Stmt) -> StatementNode {
         }),
     };
     StatementNode { kind, line_number }
+}
+
+fn has_branching_control_flow_stmt(stmt: &syn::Stmt) -> bool {
+    match stmt {
+        syn::Stmt::Expr(expr, _) => {
+            has_branching_control_flow_expr(expr)
+        }
+        syn::Stmt::Local(local) => {
+            if let Some(init) = &local.init {
+                has_branching_control_flow_expr(&init.expr)
+            } else {
+                false
+            }
+        }
+        syn::Stmt::Macro(stmt_macro) => {
+            let name = stmt_macro.mac.path.segments.last().unwrap().ident.to_string();
+            name == "panic"
+                || name == "assert"
+                || name == "assert_eq"
+                || name == "assert_ne"
+                || name == "unreachable"
+                || name == "require"
+                || name == "require_eq"
+                || name == "require_keys_eq"
+        }
+        _ => false,
+    }
+}
+
+fn has_branching_control_flow_expr(expr: &syn::Expr) -> bool {
+    match expr {
+        syn::Expr::If(_) | syn::Expr::Return(_) => true,
+        syn::Expr::Try(_) => true,
+        syn::Expr::Block(expr_block) => {
+            has_branching_control_flow(&expr_block.block.stmts)
+        }
+        syn::Expr::Macro(expr_macro) => {
+            let name = expr_macro.mac.path.segments.last().unwrap().ident.to_string();
+            name == "panic"
+                || name == "assert"
+                || name == "assert_eq"
+                || name == "assert_ne"
+                || name == "unreachable"
+                || name == "require"
+                || name == "require_eq"
+                || name == "require_keys_eq"
+        }
+        syn::Expr::Field(field) => has_branching_control_flow_expr(&field.base),
+        syn::Expr::MethodCall(method) => {
+            has_branching_control_flow_expr(&method.receiver) || method.args.iter().any(has_branching_control_flow_expr)
+        }
+        syn::Expr::Binary(bin) => {
+            has_branching_control_flow_expr(&bin.left) || has_branching_control_flow_expr(&bin.right)
+        }
+        syn::Expr::Reference(r) => has_branching_control_flow_expr(&r.expr),
+        syn::Expr::Cast(c) => has_branching_control_flow_expr(&c.expr),
+        syn::Expr::Index(i) => has_branching_control_flow_expr(&i.expr) || has_branching_control_flow_expr(&i.index),
+        syn::Expr::Assign(assign) => {
+            has_branching_control_flow_expr(&assign.left) || has_branching_control_flow_expr(&assign.right)
+        }
+        _ => false,
+    }
+}
+
+fn has_branching_control_flow(stmts: &[syn::Stmt]) -> bool {
+    stmts.iter().any(has_branching_control_flow_stmt)
 }

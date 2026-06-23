@@ -1,7 +1,7 @@
 use crate::ast::{ExpressionKind, ExpressionNode, StatementKind, StatementNode, InferenceScope, InferenceResult, TypeInferenceEngine};
 use crate::cfg::guards::{FactConfidence, GuardFact, InstructionAnalysisContext, SymbolId};
 use crate::cfg::ssa::{SSANodeState, SSAVariable};
-use crate::types::{TypeRegistry, TypeRef};
+use crate::types::TypeRegistry;
 use crate::rules::{
     AnalysisContext, DominanceChecker, FindingLocation, Rule, RuleDiagnostic, RuleSeverity,
     SymbolResolver,

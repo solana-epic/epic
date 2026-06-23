@@ -335,3 +335,134 @@ fn test_owner_validation_wdg_transitive() {
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].target_symbol, unchecked_symbol);
 }
+
+#[test]
+fn test_post_cpi_reload_rule() {
+    use parser_v2::rules::MissingPostCpiReloadRule;
+
+    let vault_symbol = SymbolId(1);
+
+    // Unsafe CFG: CPI call then immediate write
+    // Statement 1: CPI (represented as a method call named transfer)
+    let cpi_stmt = StatementNode {
+        kind: StatementKind::Semi(ExpressionNode {
+            kind: ExpressionKind::MethodCall {
+                object: Box::new(ExpressionNode {
+                    kind: ExpressionKind::Unresolved,
+                }),
+                method: "token::transfer".to_string(),
+                arguments: Vec::new(),
+            },
+        }),
+        line_number: 10,
+    };
+
+    // Statement 2: vault.amount = 100; (Access)
+    let access_stmt = StatementNode {
+        kind: StatementKind::Expr(ExpressionNode {
+            kind: ExpressionKind::Assign {
+                left: Box::new(ExpressionNode {
+                    kind: ExpressionKind::FieldAccess {
+                        object: Box::new(ExpressionNode {
+                            kind: ExpressionKind::Identifier("vault".to_string()),
+                        }),
+                        field: "amount".to_string(),
+                    },
+                }),
+                right: Box::new(ExpressionNode {
+                    kind: ExpressionKind::Literal("100".to_string()),
+                }),
+            },
+        }),
+        line_number: 11,
+    };
+
+    let mut nodes = HashMap::new();
+    nodes.insert(
+        0,
+        CFGNode {
+            id: 0,
+            statements: vec![cpi_stmt.clone(), access_stmt.clone()],
+        },
+    );
+
+    let mut ssa_states = HashMap::new();
+    let mut active_variables = HashMap::new();
+    active_variables.insert(
+        "vault".to_string(),
+        SSAVariable::Versioned {
+            name: "vault".to_string(),
+            version: 1,
+        },
+    );
+
+    let stmt_state = SSANodeState {
+        active_variables,
+        variable_types: HashMap::new(),
+    };
+
+    ssa_states.insert(
+        0,
+        NodeSSAInfo {
+            start_state: stmt_state.clone(),
+            statement_states: vec![stmt_state.clone(), stmt_state.clone()],
+            end_state: stmt_state.clone(),
+        },
+    );
+
+    let cfg = ControlFlowGraph {
+        nodes,
+        edges: Vec::new(),
+        entry_node: 0,
+        exit_nodes: vec![0],
+        boundary_warnings: Vec::new(),
+        ssa_states,
+    };
+
+    let guard_facts = vec![(
+        GuardFact::Owner {
+            account: GuardTarget::Account(vault_symbol),
+            expected_owner: FactExpression::Literal("program_id".to_string()),
+        },
+        FactProvenance {
+            source_file: "lib.rs".to_string(),
+            line_number: 1,
+            column_number: 1,
+            framework: "Anchor".to_string(),
+            confidence_level: FactConfidence::Declared,
+            node_id: None,
+            statement_index: None,
+        },
+    )];
+
+    let mut symbol_table = HashMap::new();
+    symbol_table.insert("vault".to_string(), vault_symbol);
+
+    let context = InstructionAnalysisContext {
+        name: "test_instruction".to_string(),
+        guard_facts,
+        cfg,
+        symbol_table,
+        file_path: "lib.rs".to_string(),
+        context_var_name: "ctx".to_string(),
+    };
+
+    let mut engine = RuleEngine::new();
+    engine.register_rule(Box::new(MissingPostCpiReloadRule));
+
+    let analysis_context = parser_v2::rules::AnalysisContext {
+        program_metadata: parser_v2::rules::ProgramMetadata {
+            name: "test_program".to_string(),
+            address: None,
+        },
+        idl_metadata: None,
+        ast_graph: parser_v2::Workspace::new(),
+        instruction_context: context,
+        rule_registry: Vec::new(),
+    };
+
+    let diagnostics = engine.run_all(&analysis_context);
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].target_symbol, vault_symbol);
+    assert_eq!(diagnostics[0].rule_id, "EPIC-SEC-003");
+}

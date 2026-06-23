@@ -73,6 +73,7 @@ impl SymbolResolver {
                 self.resolve_expr(expression, ssa_state)
             }
             ExpressionKind::Try(inner) => self.resolve_expr(inner, ssa_state),
+            ExpressionKind::MethodCall { object, .. } => self.resolve_expr(object, ssa_state),
             _ => None,
         }
     }
