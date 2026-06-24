@@ -1,6 +1,6 @@
 {
   "name": "@solana-epic/github-action",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "Solana EPIC Upgrade Guard GitHub Action",
   "private": false,
   "publishConfig": {
@@ -16,11 +16,34 @@
   "dependencies": {
     "@actions/core": "^1.10.1",
     "@actions/github": "^6.0.0",
-    "@solana-epic/diff-engine": "^0.1.0-beta.1",
-    "@solana-epic/parser": "^0.1.0-beta.1"
+    "@solana-epic/diff-engine": "^0.1.0-beta.2",
+    "@solana-epic/parser": "^0.1.0-beta.2"
   },
   "devDependencies": {
     "esbuild": "^0.20.1",
     "typescript": "^5.3.3"
-  }
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/solana-epic/epic#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/solana-epic/epic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/solana-epic/epic/issues"
+  },
+  "keywords": [
+    "solana",
+    "anchor",
+    "security",
+    "static-analysis",
+    "audit",
+    "upgrade-safety",
+    "rust"
+  ],
+  "author": "Solana EPIC Team",
+  "files": [
+    "dist",
+    "action.yml"
+  ]
 }

@@ -1,6 +1,6 @@
 {
   "name": "@solana-epic/cli-win32-x64",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "Prebuilt win32-x64 binary of parser-v2 for EPIC CLI",
   "private": false,
   "publishConfig": {
@@ -17,5 +17,24 @@
   ],
   "exports": {
     ".": "./bin/parser-v2.exe"
-  }
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/solana-epic/epic#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/solana-epic/epic.git"
+  },
+  "bugs": {
+    "url": "https://github.com/solana-epic/epic/issues"
+  },
+  "keywords": [
+    "solana",
+    "anchor",
+    "security",
+    "static-analysis",
+    "audit",
+    "upgrade-safety",
+    "rust"
+  ],
+  "author": "Solana EPIC Team"
 }
