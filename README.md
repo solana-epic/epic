@@ -1,7 +1,7 @@
 # EPIC
 
 <p align="center">
-  <b>Security-First Upgrade Intelligence for Solana Programs</b>
+  <b>Upgrade Intelligence for Solana Programs</b>
 </p>
 
 <p align="center">
@@ -13,49 +13,37 @@
 
 ---
 
-EPIC protects Solana protocol teams from shipping breaking program upgrades and security vulnerabilities. By performing static syn-compiler audits of state layouts, ABI changes, and account validation rules, EPIC ensures your upgrades are safe before code ever reaches mainnet.
+EPIC is the deployment readiness and upgrade intelligence infrastructure for Solana programs. Positioned between git push and mainnet, EPIC evaluates state layout evolution, ABI compatibility, and security regressions to answer a simple question before you deploy:
+
+**"Can this upgrade safely reach mainnet?"**
 
 ---
 
 ## Why EPIC Exists
 
-Every Solana upgrade introduces risk. A seemingly harmless change can:
-*   **Break account layouts** and corrupt deserialization layouts on mainnet.
-*   **Introduce critical security vulnerabilities** in modified instruction paths.
-*   **Create upgrade incompatibilities** that block protocol operations.
-*   **Open memory/realloc attack vectors** due to unintended account shrinkage.
+Standard developer tooling tells you if your code compiles. Security scanners tell you if a codebase has known vulnerabilities. **Neither tells you if the transition between your old deployment and your new code will break state on mainnet.**
 
-Most teams discover these issues during post-mortem investigations or expensive auditing cycles. **EPIC catches them at compile time, in local development, and on every pull request.**
+Every Solana program upgrade is a high-risk migration. A minor type shift, field reordering, or missing state reload can corrupt deserialization layouts, lock user accounts, or introduce severe security regressions.
+
+EPIC catches these upgrade compatibility issues and regressions in local development and on every pull request.
 
 ---
 
 ## What EPIC Does
 
-### 1. Upgrade Intelligence (`epic check`)
-Compare two program versions and understand exactly what changed in state and serialization layouts.
+### 1. Upgrade Compatibility (`epic check`)
+Compare two program versions to verify layout compatibility and prevent state corruption.
 ```
 $ epic check ./old-program ./new-program
 
 🔍 Comparing Program Layouts...
 [CRITICAL] Layout size decrease detected on struct Position: 56 bytes -> 48 bytes.
-           Account shrinkage can lead to runtime deserialization failures.
+           Account shrinkage can lead to mainnet deserialization failures.
            Consider using realloc or adding padding fields to preserve layout sizing.
 ```
 
-### 2. Security Auditing (`epic audit`)
-Run static security rules against your codebase. EPIC analyzes compile-time semantic constraints on instruction structures to enforce correct program policies.
-```
-$ epic audit .
-
-🔍 Auditing Security Invariants...
-[CRITICAL] EPIC-SEC-003: Missing Post-CPI Account Reload
-           Affected File: programs/vault/src/lib.rs:42
-           Context: State mutation of Vault account following CPI invocation
-           Recommendation: Reload local state cache (e.g., run vault.reload()?) after CPI.
-```
-
-### 3. Account Intelligence (`epic analyze`)
-Analyze state account layouts and serialized sizes to manage state growth impact.
+### 2. State Layout Analysis (`epic analyze`)
+Track account layout evolution, serialized sizes, and memory offsets to manage state scaling.
 ```
 $ epic analyze .
 
@@ -65,11 +53,23 @@ STATE ACCOUNTS:
 └── Position (56 bytes) [program::lib] [Static]
 ```
 
+### 3. Upgrade Safety Verification (`epic audit`)
+Verify that modifications to instruction state rules and safety invariants do not introduce security regressions.
+```
+$ epic audit .
+
+🔍 Verifying Invariant Safety...
+[CRITICAL] EPIC-SEC-003: Missing Post-CPI Account Reload
+           Affected File: programs/vault/src/lib.rs:42
+           Context: State mutation of Vault account following CPI invocation
+           Recommendation: Reload local state cache (e.g. run vault.reload()?) after CPI.
+```
+
 ---
 
 ## Installation
 
-Install the CLI globally:
+Install the CLI wrapper:
 ```bash
 npm install -g @solana-epic/cli
 ```
@@ -83,25 +83,25 @@ epic rules
 
 ## Quick Start
 
-### 1. Run a Security Scan
-Scan your active directory for vulnerabilities:
+### 1. Check Upgrade Compatibility
+Compare your current working directory against a previous release or program folder:
+```bash
+epic check ./old_release_dir ./new_release_dir
+```
+
+### 2. Run Layout Invariant Verification
+Audit your codebase for security regressions before committing:
 ```bash
 epic audit .
 ```
 
-### 2. Verify Upgrade Safety
-Compare a previous commit/version against your new modifications:
-```bash
-epic check ./old_program_dir ./new_program_dir
-```
-
-### 3. Integrate with GitHub PRs (CI/CD)
-EPIC fully supports the Static Analysis Results Interchange Format (SARIF) JSON schema. Add this step to your GitHub Actions workflow:
+### 3. Integrate with CI/CD
+Incorporate upgrade checks directly into your pull requests. EPIC supports standard SARIF outputs for GitHub Actions integration:
 ```yaml
-- name: Run EPIC Security Audit
+- name: Run EPIC Upgrade Checks
   run: npx @solana-epic/cli audit . -f sarif
 
-- name: Upload SARIF Report
+- name: Upload Safety Report
   uses: github/code-scanning-upload-aurora@v2
   with:
     sarif_file: sarif.json
@@ -109,9 +109,9 @@ EPIC fully supports the Static Analysis Results Interchange Format (SARIF) JSON 
 
 ---
 
-## Security Rules
+## Safety Invariant Rules
 
-EPIC parses Rust source code directly to enforce the following security invariants:
+EPIC parses Rust source code directly to ensure upgrade changes do not break safety invariants:
 
 | Rule ID | Name | Severity | Description |
 | :--- | :--- | :--- | :--- |
@@ -121,7 +121,7 @@ EPIC parses Rust source code directly to enforce the following security invarian
 | **EPIC-SEC-004** | PDA Seed Collision Risk | High | Identifies adjacent variable-length seeds lacking delimiters that could cause derivation collision. |
 | **EPIC-SEC-005** | Arbitrary CPI Targets | Critical | Flags CPIs targeting dynamic program IDs without validations. |
 
-To understand a finding in detail, run:
+To inspect a rule's criteria in detail, run:
 ```bash
 epic explain EPIC-SEC-001
 ```
@@ -130,7 +130,7 @@ epic explain EPIC-SEC-001
 
 ## Architecture Overview
 
-EPIC compiles Solana Rust ASTs directly into control-flow models and evaluates security invariants across the following unified pipeline:
+EPIC constructs control-flow representations of program ASTs and diffs state schemas across the following unified pipeline:
 ```
 Source Code ➔ Rust AST Parser ➔ Type Registry ➔ CFG Builder ➔ SSA Engine ➔ Dominance Tree ➔ GuardFacts IR ➔ Rules Analyzer
 ```
@@ -140,10 +140,9 @@ For a deep dive into the compiler and engine architecture, see [docs/architectur
 
 ## Roadmap
 
-*   **Additional security rules**: Expanding invariant check coverage (EPIC-SEC-006+).
-*   **IDL-aware upgrade analysis**: Compare layouts via IDL definitions.
-*   **LSP integration**: Real-time editor diagnostics.
-*   **Automated remediation**: Suggesting safe code replacements for audit findings.
+*   **IDL-based layout drift verification**: Track compatibility profiles directly via published IDLs.
+*   **Editor LSP integration**: Real-time IDE diagnostics for layout drift and offset alignment.
+*   **Migration assistance**: Automatically generate Anchor state migration wrappers.
 
 ---
 
