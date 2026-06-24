@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/@solana-epic/cli"><img src="https://img.shields.io/npm/v/@solana-epic/cli.svg?style=flat-square&color=blue" alt="npm version" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/akxh5/Solana-EPIC.svg?style=flat-square" alt="license" /></a>
-  <a href="https://github.com/akxh5/Solana-EPIC/releases"><img src="https://img.shields.io/github/v/release/akxh5/Solana-EPIC.svg?style=flat-square&color=orange" alt="GitHub release" /></a>
-  <a href="https://github.com/akxh5/Solana-EPIC/actions"><img src="https://img.shields.io/github/actions/workflow/status/akxh5/Solana-EPIC/ci.yml?branch=main&style=flat-square" alt="GitHub Actions status" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/solana-epic/epic.svg?style=flat-square" alt="license" /></a>
+  <a href="https://github.com/solana-epic/epic/releases"><img src="https://img.shields.io/github/v/release/solana-epic/epic.svg?style=flat-square&color=orange" alt="GitHub release" /></a>
+  <a href="https://github.com/solana-epic/epic/actions"><img src="https://img.shields.io/github/actions/workflow/status/solana-epic/epic/test.yml?branch=main&style=flat-square" alt="GitHub Actions status" /></a>
 </p>
 
 ---
