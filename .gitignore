@@ -13,4 +13,9 @@ session.txt
 demo-fixtures/
 epic-report.md
 epic-report.json
-artifacts/
+artifacts/packages/
+artifacts/local-packages/
+!artifacts/**/*.md
+!artifacts/**/*.py
+!artifacts/**/*.ts
+!artifacts/**/*.json
