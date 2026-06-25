@@ -58,13 +58,31 @@ Verify that modifications to instruction state rules and safety invariants do no
 ```
 $ epic audit .
 
-🔍 Verifying Invariant Safety...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Security Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Critical ............ 0
+High ................ 2
+Rules Triggered ..... 1
+
 [CRITICAL] EPIC-SEC-003: Missing Post-CPI Account Reload
            Affected File: programs/vault/src/lib.rs:42
-           Context: State mutation of Vault account following CPI invocation
-           Recommendation: Reload local state cache (e.g. run vault.reload()?) after CPI.
 ```
 
+### 4. Environment Diagnostics (`epic doctor`)
+Automatically verify host prerequisites (Node, Cargo, Rustc) and workspace configurations instantly.
+```
+$ epic doctor
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Environment Diagnostics
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ Rust Installed
+✓ Cargo
+✓ Node.js
+✓ Workspace Detected
+✓ Security Rules Loaded
+```
 ---
 
 ## Installation
