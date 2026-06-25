@@ -8,18 +8,19 @@ const isColorsEnabled = () => {
 };
 
 export const colors = {
-  gold: (text: string) => isColorsEnabled() ? `\x1b[38;2;214;185;140m${text}\x1b[0m` : text,
-  ivory: (text: string) => isColorsEnabled() ? `\x1b[38;2;244;239;230m${text}\x1b[0m` : text,
-  gray: (text: string) => isColorsEnabled() ? `\x1b[38;2;156;163;175m${text}\x1b[0m` : text,
-  graphite: (text: string) => isColorsEnabled() ? `\x1b[38;2;58;58;58m${text}\x1b[0m` : text,
-  success: (text: string) => isColorsEnabled() ? `\x1b[38;2;74;222;128m${text}\x1b[0m` : text,
-  warning: (text: string) => isColorsEnabled() ? `\x1b[38;2;251;191;36m${text}\x1b[0m` : text,
-  critical: (text: string) => isColorsEnabled() ? `\x1b[38;2;239;68;68m${text}\x1b[0m` : text,
-  info: (text: string) => isColorsEnabled() ? `\x1b[38;2;59;130;246m${text}\x1b[0m` : text,
-  violet: (text: string) => isColorsEnabled() ? `\x1b[38;2;139;92;246m${text}\x1b[0m` : text,
+  bold: (text: string) => isColorsEnabled() ? `\x1b[1m${text}\x1b[0m` : text,
+  dim: (text: string) => isColorsEnabled() ? `\x1b[2m${text}\x1b[0m` : text,
+  white: (text: string) => isColorsEnabled() ? `\x1b[1;97m${text}\x1b[0m` : text,
+  cyan: (text: string) => isColorsEnabled() ? `\x1b[36m${text}\x1b[0m` : text,
+  gray: (text: string) => isColorsEnabled() ? `\x1b[90m${text}\x1b[0m` : text,
+  success: (text: string) => isColorsEnabled() ? `\x1b[32m${text}\x1b[0m` : text,
+  warning: (text: string) => isColorsEnabled() ? `\x1b[33m${text}\x1b[0m` : text,
+  critical: (text: string) => isColorsEnabled() ? `\x1b[31m${text}\x1b[0m` : text,
+  info: (text: string) => isColorsEnabled() ? `\x1b[34m${text}\x1b[0m` : text,
+  violet: (text: string) => isColorsEnabled() ? `\x1b[35m${text}\x1b[0m` : text,
 };
 
-export const DIVIDER = "────────────────────────────────────────";
+export const DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
 
 let bannerPrinted = false;
 
@@ -35,27 +36,20 @@ export const printBanner = (noBannerFlag: boolean = false) => {
     return;
   }
 
-  const logo = `
-███████╗██████╗ ██╗ ██████╗
-██╔════╝██╔══██╗██║██╔════╝
-█████╗  ██████╔╝██║██║
-██╔══╝  ██╔═══╝ ██║██║
-███████╗██║     ██║╚██████╗
-╚══════╝╚═╝     ╚═╝ ╚═════╝`;
-
-  console.log(colors.gold(logo.substring(1))); 
-  console.log(colors.ivory("EPIC v0.1.0-beta.2"));
-  console.log(colors.gray("Know your upgrade before mainnet."));
-  console.log(colors.graphite(DIVIDER));
+  console.log(colors.gray(DIVIDER));
+  console.log("");
+  console.log(colors.white("EPIC"));
+  console.log(colors.dim("Security-first upgrade intelligence for Solana"));
+  console.log("");
+  console.log(colors.cyan("v0.1.0-beta.2"));
+  console.log("");
+  console.log(colors.gray(DIVIDER));
 
   bannerPrinted = true;
 };
 
 export const printFinalSignature = () => {
-  if (!process.stdout.isTTY || process.env.EPIC_NO_BANNER === "1") return;
-  console.log(colors.graphite(DIVIDER));
-  console.log(colors.gold("EPIC v0.1.0-beta.2"));
-  console.log(colors.gray("Know your upgrade before mainnet."));
+  // Replaced by end summary
 };
 
 export const printInitSequence = (steps: string[]) => {
@@ -63,14 +57,14 @@ export const printInitSequence = (steps: string[]) => {
   for (const step of steps) {
     console.log(`${colors.success("✓")} ${step}`);
   }
-  console.log("");
 };
 
 export const printSection = (title: string, data: Record<string, string | number>) => {
-  console.log(colors.ivory(title));
-  console.log(colors.graphite(DIVIDER));
+  console.log(colors.bold(title));
+  console.log("");
   for (const [key, value] of Object.entries(data)) {
-    console.log(`${key.padEnd(19)} ${value}`);
+    const dots = colors.gray(".".repeat(Math.max(3, 20 - key.length)));
+    console.log(`${key} ${dots} ${colors.bold(String(value))}`);
   }
   console.log("");
 };
@@ -99,12 +93,56 @@ export const printRuleFinding = (finding: any) => {
   const ruleId = colors.violet(finding.rule_id);
   const ruleName = finding.rule_name || ruleNames[finding.rule_id] || finding.rule_id;
   
+  console.log(colors.gray("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+  console.log("");
   console.log(sev);
   console.log(ruleId);
-  console.log(colors.ivory(ruleName));
-  console.log(colors.gray("Location"));
-  console.log(`${finding.location.file}:${finding.location.line}`);
-  console.log(colors.gray("Recommendation"));
+  console.log("");
+  console.log(colors.bold(ruleName));
+  console.log(colors.gray(`${finding.location.file}:${finding.location.line}`));
+  console.log("");
   console.log(finding.message);
-  console.log(colors.graphite(DIVIDER));
+  console.log("");
+  console.log(colors.dim("Recommendation"));
+  console.log(finding.recommendation || "Review and validate.");
+  console.log("");
+};
+
+export const printEndSummary = (rulesExec: number, critical: number, high: number, timeMs: number) => {
+  console.log(colors.gray("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+  console.log("");
+  console.log(colors.bold("Audit Complete"));
+  console.log("");
+  
+  const printLine = (key: string, val: string | number) => {
+    const dots = colors.gray(".".repeat(Math.max(3, 20 - key.length)));
+    console.log(`${key} ${dots} ${colors.bold(String(val))}`);
+  };
+  
+  printLine("Rules Executed", rulesExec);
+  printLine("Critical", critical);
+  printLine("High", high);
+  printLine("Time", (timeMs / 1000).toFixed(2) + " s");
+  
+  console.log("");
+  console.log(colors.gray("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+  console.log("");
+  console.log(colors.bold("Security Score"));
+  
+  const deduction = (critical * 10) + (high * 5);
+  let score = 100 - deduction;
+  if (score < 0) score = 0;
+  
+  const filled = Math.round(score / 10);
+  const unfilled = 10 - filled;
+  const bar = colors.cyan("█".repeat(filled)) + colors.gray("░".repeat(unfilled));
+  
+  console.log(`${bar} ${score}%`);
+  console.log("");
+  
+  if (score < 100) {
+    console.log(colors.warning("Repository requires review before deployment."));
+  } else {
+    console.log(colors.success("Repository is secure and ready for deployment."));
+  }
 };

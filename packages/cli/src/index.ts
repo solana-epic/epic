@@ -16,7 +16,7 @@ program
   .option("--no-banner", "Disable the startup banner");
 
 import { resolveParserBinary } from "./loader.js";
-import { printBanner, printInitSequence, printSection, printRuleFinding, colors, formatSeverity, printFinalSignature, DIVIDER } from "./ui.js";
+import { printBanner, printInitSequence, printSection, printRuleFinding, colors, formatSeverity, printEndSummary, DIVIDER } from "./ui.js";
 
 function findRustBinary(): string {
   try {
@@ -38,10 +38,11 @@ program
       printBanner(!opts.banner);
       
       printInitSequence([
-        "Rust AST Engine Ready",
-        "Anchor Workspace Detected",
-        "Analysis Engine Ready"
+        "Rust AST Loaded",
+        "Parsing Anchor Workspace",
+        "Building Call Graph"
       ]);
+      console.log("");
 
       const binary = findRustBinary();
       const resolvedPath = path.resolve(targetPath);
@@ -74,23 +75,20 @@ program
       if (!report.accounts || report.accounts.length === 0) {
         console.log(colors.info("No state accounts (#[account] structures) found.\n"));
       } else {
-        console.log("STATE ACCOUNTS:");
+        console.log(colors.bold("STATE ACCOUNTS"));
+        console.log("");
         for (const account of report.accounts) {
           const layoutType = account.dynamic ? "Dynamic" : "Static";
           const prefix = account.dynamic ? colors.warning("⚠️") : "├──";
-          console.log(`${prefix} ${account.account} (${account.size} bytes) [${account.namespace}] [${layoutType}]`);
+          console.log(`${prefix} ${colors.white(account.account)} (${account.size} bytes) [${colors.dim(account.namespace)}] [${colors.cyan(layoutType)}]`);
           if (account.dynamic) {
-            console.log(`   └─ Warning: Dynamic size detected. Static layout realloc checks may be inaccurate.`);
+            console.log(`   └─ ${colors.warning("Warning:")} Dynamic size detected. Static layout realloc checks may be inaccurate.`);
           }
         }
         console.log("");
       }
 
-      console.log(colors.graphite(DIVIDER));
-      console.log(colors.success("Completed successfully."));
-      console.log(`${"State Accounts".padEnd(19)} ${report.accounts ? report.accounts.length : 0}`);
-      console.log(`Completed in ${Date.now() - startTime} ms\n`);
-      printFinalSignature();
+      printEndSummary(0, 0, 0, Date.now() - startTime);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`epic analyze failed: ${message}`);
@@ -111,10 +109,11 @@ program
       printBanner(!opts.banner);
 
       printInitSequence([
-        "Rust AST Engine Ready",
-        "Anchor Workspace Detected",
-        "Upgrade Graph Built"
+        "Rust AST Loaded",
+        "Parsing Anchor Workspace",
+        "Building Call Graph"
       ]);
+      console.log("");
 
       const resolvedOldPath = path.resolve(oldPath);
       const resolvedNewPath = path.resolve(newPath);
@@ -135,14 +134,16 @@ program
       const thresholdIndex = severityOrder.indexOf(epicConfig.failOnSeverity);
       const reportSeverityIndex = severityOrder.indexOf(report.severity);
 
-      console.log(colors.graphite(DIVIDER));
+      console.log(colors.gray(DIVIDER));
+      console.log("");
       if (thresholdIndex !== -1 && reportSeverityIndex !== -1 && reportSeverityIndex >= thresholdIndex) {
-        console.log(colors.critical(`❌ EPIC Guard Blocked: Upgrade severity is ${report.severity} (threshold: ${epicConfig.failOnSeverity}).`));
+        console.log(colors.critical(`✖ EPIC Guard Blocked: Upgrade severity is ${report.severity} (threshold: ${epicConfig.failOnSeverity}).`));
       } else {
-        console.log(colors.success(`✅ EPIC Guard Approved Upgrade.`));
+        console.log(colors.success(`✓ EPIC Guard Approved Upgrade.`));
       }
-      console.log(`Completed in ${Date.now() - startTime} ms\n`);
-      printFinalSignature();
+      console.log("");
+      console.log(colors.dim(`Time: ${(Date.now() - startTime) / 1000} s`));
+      console.log("");
       
       if (thresholdIndex !== -1 && reportSeverityIndex !== -1 && reportSeverityIndex >= thresholdIndex) {
         process.exit(1);
@@ -323,8 +324,9 @@ program
   .option("-f, --format <format>", "Output format: text, json, sarif", "text")
   .option("-s, --strict", "Exit code 1 if findings severity >= threshold", false)
   .option("-c, --config <path>", "Path to epic.toml configuration file")
+  .option("-v, --verbose", "Show all findings")
   .option("--ignore <rules>", "Rule IDs to ignore (comma-separated)", (val) => val.split(",").map(r => r.trim()))
-  .action(async (targetPath: string, options: { format: string, strict: boolean, config?: string, ignore?: string[] }) => {
+  .action(async (targetPath: string, options: { format: string, strict: boolean, verbose: boolean, config?: string, ignore?: string[] }) => {
     const startTime = Date.now();
     try {
       const opts = program.opts();
@@ -332,10 +334,13 @@ program
         printBanner(!opts.banner);
 
         printInitSequence([
-          "Rust AST Engine Ready",
-          "5 Security Rules Loaded",
-          "Anchor Workspace Detected"
+          "Rust AST Loaded",
+          "Parsing Anchor Workspace",
+          "Building Call Graph",
+          "Running Security Rules",
+          "Generating Findings"
         ]);
+        console.log("");
       }
 
       const binary = findRustBinary();
@@ -374,31 +379,41 @@ program
         }
       }
 
-      const activeFindings = findings.filter((f: any) => !ignoredRules.has(f.rule_id));
+      const builtinIgnore = [".git", "target", "node_modules", "fixtures", "demo", "examples", "test", "tests", "test-repos"];
+      const activeFindings = findings.filter((f: any) => {
+        if (ignoredRules.has(f.rule_id)) return false;
+        if (!options.verbose) {
+          const relPath = path.relative(process.cwd(), f.location.file);
+          for (const p of builtinIgnore) {
+            if (relPath.includes(`/${p}/`) || relPath.startsWith(`${p}/`) || relPath === p) {
+              return false;
+            }
+          }
+        }
+        return true;
+      });
 
       if (options.format === "text") {
         printSection("Workspace", {
-          Project: path.basename(resolvedPath) || ".",
-          "Security Rules": 5,
+          "Project": path.basename(resolvedPath) || ".",
+          "Rules Loaded": 5,
           "Configuration": options.config || "epic.toml"
         });
-
-        printInitSequence([
-          "Workspace Scanned",
-          "Account Layout Analysis Complete",
-          "Upgrade Safety Verified",
-          "Security Rules Executed"
-        ]);
 
         const criticalCount = activeFindings.filter((f: any) => getSeverityLevel(f.severity) === 3).length;
         const warningCount = activeFindings.filter((f: any) => getSeverityLevel(f.severity) < 3).length;
 
-        printSection("Scan Summary", {
-          "Rules Executed": 5,
-          "Findings": activeFindings.length
+        printSection("Security Summary", {
+          "Critical": criticalCount,
+          "High": warningCount,
+          "Rules": 5
         });
 
+        const maxFindings = 5;
+        let displayed = 0;
+        
         for (const finding of activeFindings) {
+          if (!options.verbose && displayed >= maxFindings) break;
           const relPath = path.relative(process.cwd(), finding.location.file);
           printRuleFinding({
             severity: finding.severity,
@@ -410,19 +425,16 @@ program
             },
             message: finding.message
           });
+          displayed++;
         }
         
-        console.log(colors.graphite(DIVIDER));
-        if (activeFindings.length === 0) {
-          console.log(colors.success("No critical vulnerabilities detected."));
-        } else {
-          console.log(colors.success("Completed successfully."));
-          console.log(`${"Rules Executed".padEnd(19)} 5`);
-          console.log(`${"Critical Findings".padEnd(19)} ${criticalCount}`);
-          console.log(`${"Warnings".padEnd(19)} ${warningCount}`);
+        if (!options.verbose && activeFindings.length > maxFindings) {
+          console.log(colors.gray(`...and ${activeFindings.length - maxFindings} additional findings.`));
+          console.log(colors.dim(`Use --verbose to view all findings.`));
+          console.log("");
         }
-        console.log(`Completed in ${Date.now() - startTime} ms\n`);
-        printFinalSignature();
+
+        printEndSummary(5, criticalCount, warningCount, Date.now() - startTime);
       } else if (options.format === "json") {
         console.log(JSON.stringify(activeFindings, null, 2));
       } else if (options.format === "sarif") {
@@ -724,5 +736,28 @@ invoke(&ix, &[source, dest, token_program])?;
       process.exit(1);
     }
   });
+
+program.configureHelp({
+  formatHelp: (cmd, helper) => {
+    return `
+${colors.bold(colors.white("EPIC"))}
+${colors.dim("Security-first upgrade intelligence for Solana")}
+${colors.cyan("v0.1.0-beta.2")}
+
+${colors.bold("Commands")}
+  ${colors.white("audit".padEnd(14))} Run security rules against the repository.
+  ${colors.white("rules".padEnd(14))} List all available security rules.
+  ${colors.white("explain".padEnd(14))} Explain a security rule in detail.
+  ${colors.white("analyze".padEnd(14))} Analyze a Solana program workspace.
+  ${colors.white("check".padEnd(14))} Compare two workspace versions.
+
+${colors.bold("Flags")}
+  ${colors.white("-v, --verbose".padEnd(16))} Show all findings (includes fixtures/tests)
+  ${colors.white("-f, --format".padEnd(16))} Output format: text, json, sarif
+  ${colors.white("--no-banner".padEnd(16))} Disable the startup banner
+  ${colors.white("-h, --help".padEnd(16))} Print help
+`;
+  }
+});
 
 program.parse(process.argv);
