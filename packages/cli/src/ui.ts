@@ -55,16 +55,18 @@ export const printFinalSignature = () => {
 export const printInitSequence = (steps: string[]) => {
   if (!process.stdout.isTTY) return;
   for (const step of steps) {
-    console.log(`${colors.success("✓")} ${step}`);
+    console.log(`${colors.success("✓")} ${colors.dim(step)}`);
   }
 };
 
 export const printSection = (title: string, data: Record<string, string | number>) => {
-  console.log(colors.bold(title));
+  console.log(colors.gray(DIVIDER));
+  console.log(colors.white(colors.bold(title)));
+  console.log(colors.gray(DIVIDER));
   console.log("");
   for (const [key, value] of Object.entries(data)) {
     const dots = colors.gray(".".repeat(Math.max(3, 20 - key.length)));
-    console.log(`${key} ${dots} ${colors.bold(String(value))}`);
+    console.log(`${colors.white(key)} ${dots} ${colors.cyan(String(value))}`);
   }
   console.log("");
 };
@@ -122,86 +124,90 @@ export const ruleKnowledge: Record<string, { desc: string, fix: string, why: str
 };
 
 export const printRuleFinding = (finding: any) => {
-  const sev = formatSeverity(finding.severity);
-  const ruleId = colors.violet(finding.rule_id);
-  const ruleName = finding.rule_name || ruleNames[finding.rule_id] || finding.rule_id;
+  const sevVal = finding.severity.toUpperCase();
+  const icon = sevVal === "CRITICAL" ? "🔴" : sevVal === "HIGH" ? "🟠" : "🟡";
+  const sevStr = formatSeverity(finding.severity);
+  const ruleId = colors.white(finding.rule_id);
+  const ruleName = colors.dim(finding.rule_name || ruleNames[finding.rule_id] || finding.rule_id);
   const knowledge = ruleKnowledge[finding.rule_id];
   
-  console.log(colors.gray("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+  console.log(colors.gray(DIVIDER));
   console.log("");
-  console.log(sev);
+  console.log(`${icon} ${sevStr}`);
   console.log(ruleId);
+  console.log(ruleName);
   console.log("");
-  console.log(colors.bold(ruleName));
-  console.log(colors.gray(`${finding.location.file}:${finding.location.line}`));
+  console.log(colors.gray("──────────────────────────────"));
   console.log("");
-  console.log(finding.message);
+  console.log(colors.bold(colors.white("Location")));
+  console.log(colors.cyan(`${finding.location.file}:${finding.location.line}`));
   console.log("");
+  
   if (knowledge) {
-    console.log(colors.bold("Suggested Fix"));
+    console.log(colors.bold(colors.white("Why it matters")));
+    console.log(colors.dim(knowledge.why));
     console.log("");
-    console.log(knowledge.fix);
-    console.log("");
-    console.log(colors.bold("Why?"));
-    console.log(knowledge.why);
+    console.log(colors.bold(colors.white("Suggested Fix")));
+    console.log(colors.dim(knowledge.fix));
   } else {
-    console.log(colors.dim("Recommendation"));
-    console.log(finding.recommendation || "Review and validate.");
+    console.log(colors.bold(colors.white("Details")));
+    console.log(colors.dim(finding.message));
+    console.log("");
+    console.log(colors.bold(colors.white("Recommendation")));
+    console.log(colors.dim(finding.recommendation || "Review and validate."));
   }
+  console.log("");
+  console.log(colors.gray(DIVIDER));
   console.log("");
 };
 
-export const printEndSummary = (rulesExec: number, critical: number, high: number, timeMs: number, nextSteps: string[] = []) => {
-  console.log(colors.gray("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
+export const printEndSummary = (projectName: string, rulesExec: number, critical: number, high: number, timeMs: number, nextSteps: string[] = []) => {
+  console.log(colors.gray(DIVIDER));
   console.log("");
-  console.log(colors.bold("Audit Complete"));
+  console.log(colors.bold(colors.white("EPIC Security Report")));
   console.log("");
-  
-  const printLine = (key: string, val: string | number) => {
-    const dots = colors.gray(".".repeat(Math.max(3, 20 - key.length)));
-    console.log(`${key} ${dots} ${colors.bold(String(val))}`);
-  };
-  
-  printLine("Rules Executed", rulesExec);
-  printLine("Critical", critical);
-  printLine("High", high);
-  printLine("Time", (timeMs / 1000).toFixed(2) + " s");
-  
-  console.log("");
-  console.log(colors.gray("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"));
-  console.log("");
-  console.log(colors.bold("Security Score"));
   
   const deduction = (critical * 20) + (high * 10);
   let score = 100 - deduction;
   if (score < 0) score = 0;
   
-  const filled = Math.round(score / 10);
-  const unfilled = 10 - filled;
-  const bar = colors.cyan("█".repeat(filled)) + colors.gray("░".repeat(unfilled));
-  
-  console.log(`${bar} ${score} / 100`);
-  console.log("");
-  console.log(colors.gray("Status"));
-  if (score >= 95) {
-    console.log(colors.success("Production Ready"));
-  } else if (score >= 80) {
-    console.log(colors.info("Minor Issues"));
-  } else if (score >= 60) {
-    console.log(colors.warning("Needs Review"));
-  } else if (score >= 40) {
-    console.log(colors.warning("High Risk"));
-  } else {
-    console.log(colors.critical("Unsafe For Deployment"));
-  }
+  let status = "Unsafe For Deployment";
+  let statusColor = colors.critical;
+  if (score >= 95) { status = "Production Ready"; statusColor = colors.success; }
+  else if (score >= 80) { status = "Minor Issues"; statusColor = colors.info; }
+  else if (score >= 60) { status = "Needs Review"; statusColor = colors.warning; }
+  else if (score >= 40) { status = "High Risk"; statusColor = colors.warning; }
 
-  if (nextSteps && nextSteps.length > 0) {
-    console.log("");
-    console.log(colors.bold("Next Steps"));
-    console.log("");
-    nextSteps.forEach((step, idx) => {
-      console.log(`${idx + 1}. ${step}`);
-    });
-  }
+  const printLine = (key: string, val: string | number) => {
+    const spaces = " ".repeat(Math.max(1, 15 - key.length));
+    console.log(`${colors.dim(key)}${spaces}${colors.white(String(val))}`);
+  };
+
+  printLine("Repository", projectName);
+  console.log("");
+  printLine("Score", `${score} / 100`);
+  printLine("Status", statusColor(status));
+  console.log("");
+  printLine("Critical", critical);
+  printLine("High", high);
+  console.log("");
+  printLine("Scan Time", (timeMs / 1000).toFixed(2) + " seconds");
+  printLine("Generated by", "EPIC v0.1.0-beta.2");
+  console.log("");
+  console.log(colors.dim("Know your upgrade before mainnet."));
+  console.log("");
+  console.log(colors.gray(DIVIDER));
+  console.log("");
+
+  // Tips
+  const tips = [
+    "Run: epic explain EPIC-SEC-003 to understand this vulnerability.",
+    "Use: epic audit . --markdown to generate a GitHub-ready report.",
+    "Run: epic doctor to check your environment.",
+    "Run: epic audit . --include-tests to analyze test directories.",
+  ];
+  const randomTip = tips[Math.floor(Math.random() * tips.length)];
+  console.log(colors.bold(colors.white("Tip")));
+  console.log(colors.cyan(randomTip));
   console.log("");
 };
