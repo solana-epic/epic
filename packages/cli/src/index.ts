@@ -12,9 +12,11 @@ const program = new Command();
 program
   .name("epic")
   .description("EPIC CLI for Solana Upgrade Intelligence (powered by parser-v2 Rust AST engine).")
-  .version("0.4.0");
+  .version("0.4.0")
+  .option("--no-banner", "Disable the startup banner");
 
 import { resolveParserBinary } from "./loader.js";
+import { printBanner, printInitSequence, printSection, printRuleFinding, colors, formatSeverity } from "./ui.js";
 
 function findRustBinary(): string {
   try {
@@ -31,6 +33,15 @@ program
   .argument("<path>", "Path to an Anchor project, Rust source directory, or Rust file")
   .action((targetPath: string) => {
     try {
+      const opts = program.opts();
+      printBanner(!opts.banner);
+      
+      printInitSequence([
+        "Rust AST engine initialized",
+        "Workspace discovered",
+        "Account graph built"
+      ]);
+
       const binary = findRustBinary();
       const resolvedPath = path.resolve(targetPath);
       
@@ -47,9 +58,18 @@ program
 
       const report = JSON.parse(result.stdout.trim());
       
-      console.log(`\n🔍 Analyzing Solana Program Workspace: ${targetPath}`);
-      console.log(`Found ${report.structs_found} structs, ${report.enums_found} enums, ${report.aliases_found} aliases.\n`);
+      printSection("Workspace", {
+        Project: path.basename(resolvedPath),
+        Structs: report.structs_found,
+        Enums: report.enums_found,
+        Aliases: report.aliases_found
+      });
       
+      printSection("Parser", {
+        Engine: "Rust AST v2",
+        Status: "Ready"
+      });
+
       if (!report.accounts || report.accounts.length === 0) {
         console.log("No state accounts (#[account] structures) found.");
         return;
@@ -58,7 +78,7 @@ program
       console.log("STATE ACCOUNTS:");
       for (const account of report.accounts) {
         const layoutType = account.dynamic ? "Dynamic" : "Static";
-        const prefix = account.dynamic ? "⚠️" : "├──";
+        const prefix = account.dynamic ? colors.warning("⚠️") : "├──";
         console.log(`${prefix} ${account.account} (${account.size} bytes) [${account.namespace}] [${layoutType}]`);
         if (account.dynamic) {
           console.log(`   └─ Warning: Dynamic size detected. Static layout realloc checks may be inaccurate.`);
@@ -80,6 +100,15 @@ program
   .argument("<new_path>", "Path to the new program version source directory")
   .action(async (oldPath: string, newPath: string, options: { config?: string }) => {
     try {
+      const opts = program.opts();
+      printBanner(!opts.banner);
+
+      printInitSequence([
+        "Rust AST engine initialized",
+        "Workspace discovered",
+        "Building account graph..."
+      ]);
+
       const resolvedOldPath = path.resolve(oldPath);
       const resolvedNewPath = path.resolve(newPath);
 
@@ -283,6 +312,18 @@ program
   .option("--ignore <rules>", "Rule IDs to ignore (comma-separated)", (val) => val.split(",").map(r => r.trim()))
   .action(async (targetPath: string, options: { format: string, strict: boolean, config?: string, ignore?: string[] }) => {
     try {
+      const opts = program.opts();
+      if (options.format === "text") {
+        printBanner(!opts.banner);
+
+        printInitSequence([
+          "Rust AST engine initialized",
+          "Loading security rules...",
+          "Workspace discovered",
+          "Building account graph..."
+        ]);
+      }
+
       const binary = findRustBinary();
       const resolvedPath = path.resolve(targetPath);
       
@@ -322,15 +363,26 @@ program
       const activeFindings = findings.filter((f: any) => !ignoredRules.has(f.rule_id));
 
       if (options.format === "text") {
+        printSection("Workspace", {
+          Project: path.basename(resolvedPath),
+          "Security Rules": activeFindings.length > 0 ? "Findings present" : "Clear"
+        });
+
         if (activeFindings.length === 0) {
-          console.log("No security findings found.");
+          console.log(colors.success("No security findings found."));
         } else {
           for (const finding of activeFindings) {
-            const sevUpper = finding.severity.toUpperCase();
             const relPath = path.relative(process.cwd(), finding.location.file);
-            console.log(`${sevUpper} ${finding.rule_id}`);
-            console.log(`${relPath}:${finding.location.line}:${finding.location.column}`);
-            console.log(`${finding.message}\n`);
+            printRuleFinding({
+              severity: finding.severity,
+              rule_id: finding.rule_id,
+              rule_name: finding.rule_name, // ui.ts handles fallback
+              location: {
+                file: relPath,
+                line: finding.location.line,
+              },
+              message: finding.message
+            });
           }
         }
       } else if (options.format === "json") {
