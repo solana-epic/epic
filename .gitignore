@@ -6,5 +6,9 @@ dist
 test-repos/
 .agents/
 **/target/
-artifacts/packages/
-artifacts/local-packages/
+artifacts/
+*.log
+*.tmp
+*.bak
+.eslintcache
+coverage/
