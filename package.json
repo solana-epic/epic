@@ -20,6 +20,12 @@
     "turbo": "^2.5.4",
     "typescript": "^5.8.3"
   },
+  "overrides": {
+    "@solana-epic/cli-darwin-arm64": "0.1.0-beta.1",
+    "@solana-epic/cli-darwin-x64": "0.1.0-beta.1",
+    "@solana-epic/cli-linux-x64": "0.1.0-beta.1",
+    "@solana-epic/cli-win32-x64": "0.1.0-beta.1"
+  },
   "engines": {
     "node": ">=20"
   },
