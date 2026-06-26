@@ -5,17 +5,6 @@ dist
 .DS_Store
 test-repos/
 .agents/
-*.jsonl
-session.txt
 **/target/
-*.err
-*.json
-demo-fixtures/
-epic-report.md
-epic-report.json
 artifacts/packages/
 artifacts/local-packages/
-!artifacts/**/*.md
-!artifacts/**/*.py
-!artifacts/**/*.ts
-!artifacts/**/*.json
