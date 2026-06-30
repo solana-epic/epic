@@ -26,7 +26,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run EPIC Upgrade Intelligence
-        uses: solana-epic/github-action@v0.1.0-beta.3
+        uses: solana-epic/epic@v0.2.0-beta.0
         with:
           old_path: src-old
           new_path: src-new

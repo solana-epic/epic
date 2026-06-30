@@ -1,6 +1,6 @@
 {
   "name": "epic",
-  "version": "0.1.0-beta.3",
+  "version": "0.2.0-beta.0",
   "private": true,
   "description": "Upgrade Intelligence for Solana. Deployment safety layer for Solana programs.",
   "license": "MIT",
