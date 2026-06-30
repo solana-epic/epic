@@ -1,7 +1,7 @@
 # EPIC
 
 <p align="center">
-  <b>Upgrade Intelligence for Solana Programs</b>
+  <b>Upgrade Intelligence for Solana</b>
 </p>
 
 <p align="center">
@@ -11,23 +11,25 @@
 
 ---
 
-EPIC is the deployment readiness and upgrade intelligence infrastructure for Solana programs. Positioned between `git push` and mainnet, EPIC evaluates state layout evolution, ABI compatibility, and security regressions to answer a simple question before you deploy:
+## The Problem
 
-**"Can I safely deploy this upgrade?"**
+**Your Solana upgrade compiled successfully.**
+
+**Tests pass.**
+
+**Audits pass.**
+
+**It is still about to corrupt every existing account.**
+
+A minor type shift, field reordering, or missing state reload can corrupt deserialization layouts, lock user funds, and introduce severe security regressions. When you deploy a program upgrade on Solana, it is a high-risk migration. 
 
 ---
 
-## What Happens to My Existing Accounts?
+## The Solution
 
-Every Solana program upgrade is a high-risk migration. A minor type shift, field reordering, or missing state reload can corrupt deserialization layouts, lock user accounts, or introduce severe security regressions.
+Deploy with certainty. 
 
-Standard developer tooling tells you if your code compiles. Security scanners tell you if a codebase has known vulnerabilities. **Neither tells you if the transition between your old deployment and your new code will break state on mainnet.**
-
-EPIC catches these upgrade compatibility issues in local development and on every pull request.
-
-### Catch Corruptions Before Deployment
-
-Compare two program versions to verify layout compatibility and prevent state corruption.
+EPIC acts as the deployment safety layer for Solana. Before you merge a pull request or deploy to mainnet, EPIC analyzes your state layout evolution, ABI compatibility, and security lifecycle.
 
 ```bash
 $ epic check ./old-program ./new-program
@@ -68,76 +70,168 @@ RECOMMENDED UPGRADE PLAN
      tail; never reorder, remove, retype, or shrink in place).
   3. If the new shape is required, introduce a versioned account (new
      discriminator) and migrate state explicitly into it.
-  4. Re-run `epic check` and verify the migration against a forked mainnet
-     state before shipping.
 ```
 
 ---
 
-## 360° Upgrade Security
+## Why EPIC Exists
 
-EPIC doesn't just check layouts. It analyzes the entire lifecycle of an upgrade.
+**Compiler**  
+Ensures your syntax is correct and types align.
 
-### 1. Workspace Analysis (`epic analyze`)
-Track account layout evolution, serialized sizes, and memory offsets to manage state scaling.
+↓
 
-### 2. Security Audit (`epic audit`)
-Verify that modifications to instruction state rules and safety invariants do not introduce security regressions.
+**Security Scanners**  
+Ensures your code doesn't contain known vulnerabilities.
 
-### 3. Environment Diagnostics (`epic doctor`)
-Automatically verify host prerequisites (Node, Cargo, Rustc) and workspace configurations instantly.
+↓
+
+**EPIC**  
+Ensures the transition between your old on-chain deployment and your new code will not break live state.
+
+↓
+
+**Deployment**
+
+EPIC verifies upgrade compatibility, answering a simple question before you ever sign a transaction: *"Can I safely deploy this?"*
+
+---
+
+## Core Capabilities
+
+- **Compatibility Analysis**: Compare two program versions to verify layout compatibility and prevent state corruption.
+- **Security Audit**: Verify that modifications to instruction state rules and safety invariants do not introduce regressions.
+- **Workspace Analysis**: Track account layout evolution, serialized sizes, and memory offsets to manage state scaling.
+- **Environment Diagnostics**: Automatically verify host prerequisites and workspace configurations.
+- **GitHub Action**: Automate upgrade intelligence checks natively in your CI pipeline.
 
 ---
 
 ## Installation
 
-Install the CLI wrapper:
+Install the EPIC CLI globally via npm:
+
 ```bash
 npm install -g @solana-epic/cli
 ```
 
 Verify your installation:
+
 ```bash
-epic doctor
+epic --version
 ```
 
 ---
 
-## Integrate with CI/CD
+## Quick Start
 
-Incorporate upgrade checks directly into your pull requests. EPIC supports standard JSON and SARIF outputs for GitHub Actions integration:
+Check compatibility between two versions of your Anchor program:
+
+```bash
+epic check path/to/v1 path/to/v2
+```
+
+Audit your current workspace:
+
+```bash
+epic audit ./my-project
+```
+
+Analyze the state layouts of a program:
+
+```bash
+epic analyze ./my-project
+```
+
+---
+
+## Upgrade Verdicts
+
+EPIC classifies every state layout modification into actionable verdicts:
+
+### SAFE
+The new layout is identical to the old layout. It is 100% safe to deploy.
+
+### MIGRATION REQUIRED
+You appended a new field to the end of the struct. This does not shift existing fields, but you must ensure that your program correctly initializes the new field or handles `Realloc` properly for existing on-chain data.
+
+### BLOCKED
+You deleted a field, reordered fields, or changed a data type in place. This shifts bytes on disk. If deployed, existing accounts will silently deserialize the wrong memory, corrupting your application. 
+
+---
+
+## GitHub Action Integration
+
+Integrate EPIC into your CI pipeline using the official GitHub Action. It automatically blocks pull requests that would corrupt mainnet state and comments with a beautiful markdown report.
+
+Add the following to `.github/workflows/epic.yml`:
 
 ```yaml
-- name: Run EPIC Upgrade Checks
-  run: npx @solana-epic/cli check ./main-branch ./pr-branch -f sarif > sarif.json
+name: EPIC Upgrade Guard
+on:
+  pull_request:
+    branches: [ main ]
 
-- name: Upload Safety Report
-  uses: github/code-scanning-upload-aurora@v2
-  with:
-    sarif_file: sarif.json
+jobs:
+  check-upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Old Version
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: old
+
+      - name: Checkout New Version
+        uses: actions/checkout@v4
+        with:
+          path: new
+
+      - name: EPIC Upgrade Check
+        uses: solana-epic/epic@v0.2.0-beta.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          old_path: ./old
+          new_path: ./new
+          fail_on_severity: Critical
 ```
 
 ---
 
-## Configuration (`epic.toml`)
+## Architecture
 
-Customize EPIC's behavior by placing an `epic.toml` file in your workspace root.
+EPIC is built around a rigorous data extraction and simulation pipeline:
 
-```toml
-[epic]
-fail_on_severity = "MAJOR"
-
-[epic.rules]
-ignore = [
-    "EPIC-SEC-004" # Disable specific rules
-]
+```mermaid
+graph TD
+    A[Parser] -->|AST & Type Registry| B[Diff Engine]
+    B -->|Structural Changes| C[Compatibility Simulator]
+    C -->|Simulated Byte Deltas| D[CLI + GitHub Action]
 ```
+
+1. **Parser**: Extracts an exact layout topology of every account and state type using Rust AST analysis.
+2. **Diff Engine**: Analyzes structural changes across versions.
+3. **Compatibility Simulator**: Calculates byte shifts, serialization impact, and deterministically models exactly how the new struct will behave on disk.
+4. **CLI / Action**: Translates findings into human-readable safety intelligence.
 
 ---
 
-## Documentation Reference
+## Roadmap
 
-- **[Architecture & Engine Design](docs/architecture.md)**
-- **[CLI Command Reference](docs/cli-reference.md)**
-- **[Upgrade Safety Guide](docs/upgrade-safety.md)**
+Upcoming milestones:
 
+- **v0.3.0**: Dynamic `Vec`/`String` resizing checks and PDA derivation tracking.
+- **v0.4.0**: Automatic zero-downtime migration script generation.
+- **v1.0.0**: Stable API, extensive protocol support, and advanced simulation integrations.
+
+---
+
+## Contributing
+
+We welcome contributions! Please see our issue tracker for open issues or submit a pull request. Make sure you run `epic doctor` to verify your environment setup before building.
+
+---
+
+## License
+
+This project is licensed under the MIT License.

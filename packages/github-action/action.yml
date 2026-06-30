@@ -1,5 +1,5 @@
-name: 'Solana EPIC Upgrade Guard'
-description: 'Analyze Solana program upgrade impact and verify state layout compatibility'
+name: 'EPIC Upgrade Intelligence'
+description: 'Upgrade Intelligence for Solana. Deployment safety layer for Solana programs.'
 author: 'Solana EPIC'
 inputs:
   github_token:

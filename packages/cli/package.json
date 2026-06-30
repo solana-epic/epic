@@ -54,5 +54,5 @@
     "rust"
   ],
   "author": "Solana EPIC Team",
-  "description": "EPIC Security CLI for Solana programs"
+  "description": "Upgrade Intelligence for Solana. Deployment safety layer for Solana programs."
 }
