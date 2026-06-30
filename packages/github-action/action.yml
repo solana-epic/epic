@@ -15,6 +15,10 @@ inputs:
     description: 'Minimum severity level to trigger a non-zero exit code (Safe, Minor, Major, Critical)'
     required: false
     default: 'Critical'
+  config_path:
+    description: 'Path to epic.toml configuration file'
+    required: false
+
   sarif_output:
     description: 'Path where the SARIF report will be written'
     required: false

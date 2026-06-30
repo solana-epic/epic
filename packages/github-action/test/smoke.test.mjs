@@ -44,20 +44,30 @@ test("GitHub Action Smoke Tests", async (t) => {
         cwd: tmpDir // Run in tmp dir to isolate the sarif output
       });
 
+      const sarifContent = fs.readFileSync(path.join(tmpDir, "epic-report.sarif"), "utf8");
+      
       return {
         status: 0,
         stdout,
         summary: fs.readFileSync(summaryFile, "utf8"),
-        output: fs.readFileSync(outputFile, "utf8")
+        output: fs.readFileSync(outputFile, "utf8"),
+        sarif: JSON.parse(sarifContent)
       };
     } catch (err) {
       if (err.status) {
+        let sarif;
+        try {
+          sarif = JSON.parse(fs.readFileSync(path.join(tmpDir, "epic-report.sarif"), "utf8"));
+        } catch (e) {
+          sarif = null;
+        }
         return {
           status: err.status,
           stdout: err.stdout,
           stderr: err.stderr,
           summary: fs.readFileSync(summaryFile, "utf8"),
-          output: fs.readFileSync(outputFile, "utf8")
+          output: fs.readFileSync(outputFile, "utf8"),
+          sarif
         };
       }
       throw err; // Unexpected error (e.g. process couldn't start)
@@ -79,6 +89,11 @@ test("GitHub Action Smoke Tests", async (t) => {
     
     // Verify outputs were set
     assert.match(result.output, /severity<<[\s\S]*Compatible/, "Expected severity output to be set to Compatible");
+    
+    // Verify SARIF format
+    assert.ok(result.sarif, "Expected SARIF report to be parsed successfully");
+    assert.strictEqual(result.sarif.version, "2.1.0", "Expected SARIF version 2.1.0");
+    assert.ok(Array.isArray(result.sarif.runs), "Expected SARIF runs to be an array");
   });
 
   await t.test("fails and correctly propagates exit code on a blocked upgrade (exit non-zero)", () => {
@@ -93,5 +108,10 @@ test("GitHub Action Smoke Tests", async (t) => {
     
     // Verify outputs were set
     assert.match(result.output, /severity<<[\s\S]*Blocked/, "Expected severity output to be set to Blocked");
+
+    // Verify SARIF format
+    assert.ok(result.sarif, "Expected SARIF report to be parsed successfully");
+    assert.strictEqual(result.sarif.version, "2.1.0", "Expected SARIF version 2.1.0");
+    assert.ok(Array.isArray(result.sarif.runs), "Expected SARIF runs to be an array");
   });
 });
