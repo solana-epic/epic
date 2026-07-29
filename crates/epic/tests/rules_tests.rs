@@ -732,3 +732,117 @@ impl<'info> SwapLikeJupiter<'info> {
     );
 }
 
+/// Verify that EPIC-SEC-009 diagnostics report real non-zero line/column values
+/// (not the historic hardcoded 0:0) by running run_audit on an inline source file
+/// containing a TokenAccount field without a mint constraint.
+#[test]
+fn test_sec009_reports_real_field_location() {
+    // The `pool_a` field is on a known line within this source snippet.
+    // proc-macro2 with span-locations gives 1-indexed line numbers.
+    let source = r#"use anchor_lang::prelude::*;
+use anchor_spl::token::{Token, TokenAccount};
+
+declare_id!("11111111111111111111111111111111");
+
+#[program]
+pub mod mock_prog {
+    use super::*;
+
+    pub fn swap(ctx: Context<TestSwap>) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct TestSwap<'info> {
+    pub user_authority: Signer<'info>,
+    #[account(mut)]
+    pub pool_a: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+}
+"#;
+
+    let temp_dir = std::env::temp_dir().join("epic_test_sec009_loc");
+    let src_dir = temp_dir.join("src");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&src_dir).unwrap();
+    std::fs::write(src_dir.join("lib.rs"), source).unwrap();
+
+    let diagnostics = epic::audit::run_audit(temp_dir.to_str().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    let sec009: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d.rule_id == "EPIC-SEC-009")
+        .collect();
+
+    assert!(
+        !sec009.is_empty(),
+        "Expected at least one EPIC-SEC-009 finding, got none. Full diagnostics: {:#?}",
+        diagnostics
+    );
+
+    for diag in &sec009 {
+        assert_ne!(
+            diag.location.line, 0,
+            "EPIC-SEC-009 diagnostic for '{}' should have non-zero line, got location {:?}",
+            diag.message, diag.location
+        );
+    }
+}
+
+/// Verify that EPIC-SEC-010 diagnostics report real non-zero line/column values
+/// for vault/pool TokenAccount fields lacking authority constraints.
+#[test]
+fn test_sec010_reports_real_field_location() {
+    let source = r#"use anchor_lang::prelude::*;
+use anchor_spl::token::{Token, TokenAccount};
+
+declare_id!("11111111111111111111111111111111");
+
+#[program]
+pub mod mock_prog {
+    use super::*;
+
+    pub fn deposit(ctx: Context<TestDeposit>) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct TestDeposit<'info> {
+    pub user_authority: Signer<'info>,
+    #[account(mut)]
+    pub pool_vault: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+}
+"#;
+
+    let temp_dir = std::env::temp_dir().join("epic_test_sec010_loc");
+    let src_dir = temp_dir.join("src");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&src_dir).unwrap();
+    std::fs::write(src_dir.join("lib.rs"), source).unwrap();
+
+    let diagnostics = epic::audit::run_audit(temp_dir.to_str().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    let sec010: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d.rule_id == "EPIC-SEC-010")
+        .collect();
+
+    assert!(
+        !sec010.is_empty(),
+        "Expected at least one EPIC-SEC-010 finding, got none. Full diagnostics: {:#?}",
+        diagnostics
+    );
+
+    for diag in &sec010 {
+        assert_ne!(
+            diag.location.line, 0,
+            "EPIC-SEC-010 diagnostic for '{}' should have non-zero line, got location {:?}",
+            diag.message, diag.location
+        );
+    }
+}
