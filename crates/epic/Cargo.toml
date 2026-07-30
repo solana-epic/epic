@@ -1,0 +1,33 @@
+[package]
+name = "epic"
+version = "0.2.0"
+edition = "2021"
+description = "Semantic static analysis engine for Solana Anchor protocols."
+license = "MIT"
+repository = "https://github.com/solana-epic/epic"
+readme = "../../README.md"
+
+[dependencies]
+syn = { version = "2.0", features = ["full", "extra-traits", "visit"] }
+quote = "1.0"
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+walkdir = "2.5"
+anyhow = "1.0"
+sha2 = "0.10"
+hex = "0.4"
+clap = { version = "4.4", features = ["derive"] }
+colored = "2.0"
+indicatif = "0.17"
+epic-ir = { version = "0.2.0", path = "../epic-ir" }
+
+[features]
+default = []
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+panic = "abort"
+strip = true
