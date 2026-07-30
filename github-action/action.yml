@@ -1,0 +1,39 @@
+name: 'EPIC Semantic Engine'
+description: 'Semantic static analysis engine for Solana Anchor protocols.'
+author: 'Solana EPIC'
+inputs:
+  path:
+    description: 'Path to the repository or program to audit'
+    required: false
+    default: '.'
+  format:
+    description: 'Output format (human, json, sarif)'
+    required: false
+    default: 'sarif'
+  upload-sarif:
+    description: 'Upload SARIF results to GitHub Code Scanning'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install EPIC
+      shell: bash
+      run: |
+        if ! command -v epic &> /dev/null; then
+          echo "Installing epic from crates.io..."
+          cargo install epic || cargo install --path ${{ github.action_path }}/../crates/epic
+        fi
+
+    - name: Run EPIC Audit
+      shell: bash
+      run: |
+        epic audit ${{ inputs.path }} --format ${{ inputs.format }} > epic-results.sarif
+        cat epic-results.sarif
+
+    - name: Upload SARIF file
+      if: inputs.upload-sarif == 'true' && inputs.format == 'sarif'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: epic-results.sarif
