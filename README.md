@@ -192,11 +192,13 @@ jobs:
           path: new
 
       - name: EPIC Security Guard
-        uses: solana-epic/epic@v0.2.0
+        uses: solana-epic/epic/github-action@main
         with:
           path: '.'
           format: 'sarif'
 ```
+
+> **Note:** First-time Action runs may take ~90 seconds since EPIC currently compiles from source. Pre-compiled binaries are planned for a future release to speed this up.
 
 ---
 

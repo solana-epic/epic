@@ -190,7 +190,7 @@ jobs:
           path: new
 
       - name: EPIC Upgrade Check
-        uses: solana-epic/epic@v0.2.0-beta.0
+        uses: solana-epic/epic/github-action@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           old_path: ./old
@@ -198,6 +198,7 @@ jobs:
           fail_on_severity: Critical
 ```
 
+> **Note:** First-time Action runs may take ~90 seconds since EPIC currently compiles from source. Pre-compiled binaries are planned for a future release to speed this up.
 ---
 
 ## Architecture

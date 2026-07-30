@@ -25,8 +25,8 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run EPIC Upgrade Intelligence
-        uses: solana-epic/epic@v0.2.0-beta.0
+      - name: EPIC Upgrade Check
+        uses: solana-epic/epic/github-action@main
         with:
           old_path: src-old
           new_path: src-new
