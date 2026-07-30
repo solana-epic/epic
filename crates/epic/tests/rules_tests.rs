@@ -719,24 +719,24 @@ impl<'info> SwapLikeJupiter<'info> {
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 
-    // Count how many times EPIC-SEC-009 fires for pool_a
-    let sec009_count = diagnostics
+    // Count how many times EPIC-SEC-TOKEN fires for pool_a
+    let sec_token_count = diagnostics
         .iter()
-        .filter(|d| d.rule_id == "EPIC-SEC-009")
+        .filter(|d| d.rule_id == "EPIC-SEC-TOKEN")
         .count();
 
     assert_eq!(
-        sec009_count, 1,
-        "Expected exactly 1 EPIC-SEC-009 finding despite multiple impl blocks, got: {}",
-        sec009_count
+        sec_token_count, 1,
+        "Expected exactly 1 EPIC-SEC-TOKEN finding despite multiple impl blocks, got: {}",
+        sec_token_count
     );
 }
 
-/// Verify that EPIC-SEC-009 diagnostics report real non-zero line/column values
+/// Verify that EPIC-SEC-TOKEN diagnostics report real non-zero line/column values
 /// (not the historic hardcoded 0:0) by running run_audit on an inline source file
 /// containing a TokenAccount field without a mint constraint.
 #[test]
-fn test_sec009_reports_real_field_location() {
+fn test_sec_token_reports_real_field_location_mint() {
     // The `pool_a` field is on a known line within this source snippet.
     // proc-macro2 with span-locations gives 1-indexed line numbers.
     let source = r#"use anchor_lang::prelude::*;
@@ -771,30 +771,30 @@ pub struct TestSwap<'info> {
     let diagnostics = epic::audit::run_audit(temp_dir.to_str().unwrap()).unwrap();
     let _ = std::fs::remove_dir_all(&temp_dir);
 
-    let sec009: Vec<_> = diagnostics
+    let sec_token: Vec<_> = diagnostics
         .iter()
-        .filter(|d| d.rule_id == "EPIC-SEC-009")
+        .filter(|d| d.rule_id == "EPIC-SEC-TOKEN")
         .collect();
 
     assert!(
-        !sec009.is_empty(),
-        "Expected at least one EPIC-SEC-009 finding, got none. Full diagnostics: {:#?}",
+        !sec_token.is_empty(),
+        "Expected at least one EPIC-SEC-TOKEN finding, got none. Full diagnostics: {:#?}",
         diagnostics
     );
 
-    for diag in &sec009 {
+    for diag in &sec_token {
         assert_ne!(
             diag.location.line, 0,
-            "EPIC-SEC-009 diagnostic for '{}' should have non-zero line, got location {:?}",
+            "EPIC-SEC-TOKEN diagnostic for '{}' should have non-zero line, got location {:?}",
             diag.message, diag.location
         );
     }
 }
 
-/// Verify that EPIC-SEC-010 diagnostics report real non-zero line/column values
+/// Verify that EPIC-SEC-TOKEN diagnostics report real non-zero line/column values
 /// for vault/pool TokenAccount fields lacking authority constraints.
 #[test]
-fn test_sec010_reports_real_field_location() {
+fn test_sec_token_reports_real_field_location_auth() {
     let source = r#"use anchor_lang::prelude::*;
 use anchor_spl::token::{Token, TokenAccount};
 
@@ -827,21 +827,21 @@ pub struct TestDeposit<'info> {
     let diagnostics = epic::audit::run_audit(temp_dir.to_str().unwrap()).unwrap();
     let _ = std::fs::remove_dir_all(&temp_dir);
 
-    let sec010: Vec<_> = diagnostics
+    let sec_token: Vec<_> = diagnostics
         .iter()
-        .filter(|d| d.rule_id == "EPIC-SEC-010")
+        .filter(|d| d.rule_id == "EPIC-SEC-TOKEN")
         .collect();
 
     assert!(
-        !sec010.is_empty(),
-        "Expected at least one EPIC-SEC-010 finding, got none. Full diagnostics: {:#?}",
+        !sec_token.is_empty(),
+        "Expected at least one EPIC-SEC-TOKEN finding, got none. Full diagnostics: {:#?}",
         diagnostics
     );
 
-    for diag in &sec010 {
+    for diag in &sec_token {
         assert_ne!(
             diag.location.line, 0,
-            "EPIC-SEC-010 diagnostic for '{}' should have non-zero line, got location {:?}",
+            "EPIC-SEC-TOKEN diagnostic for '{}' should have non-zero line, got location {:?}",
             diag.message, diag.location
         );
     }
