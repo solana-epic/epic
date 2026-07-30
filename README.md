@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@solana-epic/cli"><img src="https://img.shields.io/npm/v/@solana-epic/cli/beta.svg?style=flat-square&color=blue" alt="npm version" /></a>
+  <a href="https://crates.io/crates/epic"><img src="https://img.shields.io/crates/v/epic.svg?style=flat-square&color=blue" alt="crates.io version" /></a>
   <a href="https://github.com/solana-epic/epic/releases"><img src="https://img.shields.io/github/v/release/solana-epic/epic.svg?include_prereleases&style=flat-square&color=orange" alt="GitHub release" /></a>
   <a href="https://github.com/solana-epic/epic/actions"><img src="https://img.shields.io/github/actions/workflow/status/solana-epic/epic/test.yml?branch=main&style=flat-square" alt="GitHub Actions status" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/solana-epic/epic.svg?style=flat-square" alt="license" /></a>
@@ -34,7 +34,7 @@ Deploy with certainty.
 EPIC acts as the deployment safety layer for Solana. Before you merge a pull request or deploy to mainnet, EPIC analyzes your state layout evolution, ABI compatibility, and security lifecycle.
 
 ```bash
-$ epic check ./old-program ./new-program
+$ epic diff ./old-program ./new-program
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 EPIC ACCOUNT COMPATIBILITY
@@ -111,11 +111,13 @@ EPIC verifies upgrade compatibility, answering a simple question before you ever
 
 ## Installation
 
-Install the EPIC CLI globally via npm:
+Install the EPIC CLI globally via Cargo from the source repository:
 
 ```bash
-npm install -g @solana-epic/cli
+cargo install --path crates/epic
 ```
+
+*(Note: Once published to crates.io, you will be able to run `cargo install epic`)*
 
 Verify your installation:
 
@@ -130,7 +132,7 @@ epic --version
 Check compatibility between two versions of your Anchor program:
 
 ```bash
-epic check path/to/v1 path/to/v2
+epic diff path/to/v1 path/to/v2
 ```
 
 Audit your current workspace:
@@ -139,10 +141,10 @@ Audit your current workspace:
 epic audit ./my-project
 ```
 
-Analyze the state layouts of a program:
+Run quick syntax and AST checks without full semantic analysis:
 
 ```bash
-epic analyze ./my-project
+epic check ./my-project
 ```
 
 ---
@@ -189,13 +191,11 @@ jobs:
         with:
           path: new
 
-      - name: EPIC Upgrade Check
-        uses: solana-epic/epic@v0.2.0-beta.0
+      - name: EPIC Security Guard
+        uses: solana-epic/epic@v0.2.0
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          old_path: ./old
-          new_path: ./new
-          fail_on_severity: Critical
+          path: '.'
+          format: 'sarif'
 ```
 
 ---
