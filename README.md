@@ -111,13 +111,18 @@ EPIC verifies upgrade compatibility, answering a simple question before you ever
 
 ## Installation
 
-Install the EPIC CLI globally via Cargo from the source repository:
+Install the EPIC CLI globally via Cargo:
 
 ```bash
-cargo install --path crates/epic
+cargo install epic
 ```
 
-*(Note: Once published to crates.io, you will be able to run `cargo install epic`)*
+**Build from source (alternative):**
+```bash
+git clone https://github.com/solana-epic/epic.git
+cd epic
+cargo install --path crates/epic
+```
 
 Verify your installation:
 
