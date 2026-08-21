@@ -424,24 +424,52 @@ pub fn convert_expr(expr: &syn::Expr) -> ExpressionNode {
             }
         }
         syn::Expr::Binary(expr_binary) => {
-            let op = match &expr_binary.op {
-                syn::BinOp::Eq(_) => "==".to_string(),
-                syn::BinOp::Ne(_) => "!=".to_string(),
-                syn::BinOp::Lt(_) => "<".to_string(),
-                syn::BinOp::Gt(_) => ">".to_string(),
-                _ => {
-                    let bin_op = &expr_binary.op;
-                    quote::quote!(#bin_op).to_string().replace(" ", "")
+            // Compound assignment operators (-=, +=, *=, /=, etc.)
+            // In syn 2.x these are Expr::Binary with BinOp::SubAssign /
+            // BinOp::AddAssign / etc. Lower them to ExpressionKind::Assign so
+            // the write target is visible to EPIC-SEC-002's dominance check.
+            // The arithmetic semantics of the operator are irrelevant here.
+            if matches!(
+                expr_binary.op,
+                syn::BinOp::AddAssign(_)
+                    | syn::BinOp::SubAssign(_)
+                    | syn::BinOp::MulAssign(_)
+                    | syn::BinOp::DivAssign(_)
+                    | syn::BinOp::RemAssign(_)
+                    | syn::BinOp::BitAndAssign(_)
+                    | syn::BinOp::BitOrAssign(_)
+                    | syn::BinOp::BitXorAssign(_)
+                    | syn::BinOp::ShlAssign(_)
+                    | syn::BinOp::ShrAssign(_)
+            ) {
+                let left = convert_expr(&expr_binary.left);
+                let right = convert_expr(&expr_binary.right);
+                ExpressionNode {
+                    kind: ExpressionKind::Assign {
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
                 }
-            };
-            let lhs = convert_expr(&expr_binary.left);
-            let rhs = convert_expr(&expr_binary.right);
-            ExpressionNode {
-                kind: ExpressionKind::BinaryOp {
-                    op,
-                    lhs: Box::new(lhs),
-                    rhs: Box::new(rhs),
-                },
+            } else {
+                let op = match &expr_binary.op {
+                    syn::BinOp::Eq(_) => "==".to_string(),
+                    syn::BinOp::Ne(_) => "!=".to_string(),
+                    syn::BinOp::Lt(_) => "<".to_string(),
+                    syn::BinOp::Gt(_) => ">".to_string(),
+                    _ => {
+                        let bin_op = &expr_binary.op;
+                        quote::quote!(#bin_op).to_string().replace(" ", "")
+                    }
+                };
+                let lhs = convert_expr(&expr_binary.left);
+                let rhs = convert_expr(&expr_binary.right);
+                ExpressionNode {
+                    kind: ExpressionKind::BinaryOp {
+                        op,
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    },
+                }
             }
         }
         syn::Expr::Reference(expr_ref) => {

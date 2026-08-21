@@ -211,7 +211,49 @@ impl SignerValidationRule {
                 }
                 None
             }
+            // Compound and plain assignments: `ctx.accounts.vault.balance -= amount`
+            // (lowered from syn::Expr::AssignOp / syn::Expr::Assign).
+            // Walk the left-hand FieldAccess chain to find the ctx.accounts.<name>
+            // account reference — that is the resource being mutated.
+            epic_ir::IRExpression::Assign { left, .. } => {
+                self.extract_account_from_field_path(left)
+            }
             _ => None,
+        }
+    }
+
+    /// Walk a nested FieldAccess expression and return the shallowest sub-expression
+    /// that refers to a `ctx.accounts.<account>` account field.
+    ///
+    /// Examples:
+    ///   ctx.accounts.vault.balance  → FieldAccess { ctx.accounts.vault, "balance" }
+    ///                                → we return FieldAccess { ctx.accounts, "vault" }
+    ///                                  i.e. the expression resolving to `vault`
+    fn extract_account_from_field_path(
+        &self,
+        expr: &epic_ir::IRExpression,
+    ) -> Option<epic_ir::IRExpression> {
+        match expr {
+            epic_ir::IRExpression::FieldAccess { object, field: _ } => {
+                // If the object already resolves to ctx.accounts, this node IS the
+                // account field reference we want (e.g. FieldAccess{ctx.accounts, "vault"}).
+                if self.is_ctx_accounts(object) {
+                    return Some(expr.clone());
+                }
+                // Otherwise keep descending — the account reference is deeper.
+                self.extract_account_from_field_path(object)
+            }
+            _ => None,
+        }
+    }
+
+    /// Return true if this IR expression represents `ctx.accounts`.
+    fn is_ctx_accounts(&self, expr: &epic_ir::IRExpression) -> bool {
+        match expr {
+            epic_ir::IRExpression::FieldAccess { object, field } => {
+                field == "accounts" && matches!(object.as_ref(), epic_ir::IRExpression::Variable(v) if v == "ctx")
+            }
+            _ => false,
         }
     }
 

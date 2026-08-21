@@ -846,3 +846,133 @@ pub struct TestDeposit<'info> {
         );
     }
 }
+
+/// EPIC-SEC-002 must fire when the signer check is conditional (inside an `if`)
+/// and the privileged write is a compound assignment (`-=`) outside the `if`.
+///
+/// This is the core dominance-bypass demo case: the write is NOT dominated by
+/// the signer check because an attacker can pass `some_condition = false`.
+#[test]
+fn test_sec002_assignop_conditional_fires() {
+    let source = r#"use anchor_lang::prelude::*;
+
+declare_id!("11111111111111111111111111111111");
+
+#[program]
+pub mod dominance_bypass {
+    use super::*;
+
+    pub fn withdraw(ctx: Context<Withdraw>, amount: u64, some_condition: bool) -> Result<()> {
+        if some_condition {
+            require!(ctx.accounts.authority.is_signer, ErrorCode::Unauthorized);
+        }
+        ctx.accounts.vault.balance -= amount;
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct Withdraw<'info> {
+    /// CHECK: unsafe unchecked authority
+    #[account(mut)]
+    pub authority: AccountInfo<'info>,
+    #[account(mut)]
+    pub vault: Account<'info, VaultAccount>,
+}
+
+#[account]
+pub struct VaultAccount {
+    pub balance: u64,
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("Unauthorized")]
+    Unauthorized,
+}
+"#;
+
+    let temp_dir = std::env::temp_dir().join("epic_test_sec002_assignop_conditional");
+    let src_dir = temp_dir.join("src");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&src_dir).unwrap();
+    std::fs::write(src_dir.join("lib.rs"), source).unwrap();
+
+    let diagnostics = epic::audit::run_audit(temp_dir.to_str().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    let sec002: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d.rule_id == "EPIC-SEC-002")
+        .collect();
+
+    assert!(
+        !sec002.is_empty(),
+        "Expected EPIC-SEC-002 to fire on conditional signer check + compound-assign write, \
+         got none. Full diagnostics: {:#?}",
+        diagnostics
+    );
+}
+
+/// EPIC-SEC-002 must NOT fire when the signer check is unconditional and precedes
+/// the compound-assignment write — the write IS dominated, so no finding.
+///
+/// This guards against false positives introduced by making AssignOp writes visible.
+#[test]
+fn test_sec002_assignop_unconditional_silent() {
+    let source = r#"use anchor_lang::prelude::*;
+
+declare_id!("11111111111111111111111111111111");
+
+#[program]
+pub mod dominance_safe {
+    use super::*;
+
+    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
+        require!(ctx.accounts.authority.is_signer, ErrorCode::Unauthorized);
+        ctx.accounts.vault.balance -= amount;
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct Withdraw<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(mut)]
+    pub vault: Account<'info, VaultAccount>,
+}
+
+#[account]
+pub struct VaultAccount {
+    pub balance: u64,
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("Unauthorized")]
+    Unauthorized,
+}
+"#;
+
+    let temp_dir = std::env::temp_dir().join("epic_test_sec002_assignop_unconditional");
+    let src_dir = temp_dir.join("src");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&src_dir).unwrap();
+    std::fs::write(src_dir.join("lib.rs"), source).unwrap();
+
+    let diagnostics = epic::audit::run_audit(temp_dir.to_str().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    let sec002: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d.rule_id == "EPIC-SEC-002")
+        .collect();
+
+    assert!(
+        sec002.is_empty(),
+        "Expected EPIC-SEC-002 to be silent when signer check unconditionally dominates \
+         compound-assign write, got: {:#?}",
+        sec002
+    );
+}
